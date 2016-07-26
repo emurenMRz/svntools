@@ -24,6 +24,8 @@ public:
 		std::vector< char >	prop;
 		std::vector< char >	text;
 
+		Content():NodeCopyfromRev(0){}
+
 		bool SVNDump::Content::operator ==( Content &right )
 		{
 			return NodePath == right.NodePath
@@ -93,8 +95,13 @@ public:
 			if( !GetKeyValue( in, line, _UUID ) || line != "UUID" )
 				return false;
 
-			while( ParseRevision( in ) )
-				;
+			if( !ParseRevision( in ) )
+				return false;
+			
+			_MaxRevision	= 0;
+			for( Revisions::const_iterator it = _revisions.begin(); it != _revisions.end(); ++it )
+				if( ( *it ).number > _MaxRevision )
+					_MaxRevision	= ( *it ).number;
 
 			_IsInit	= true;
 		}
@@ -107,9 +114,15 @@ public:
 		return _UUID;
 	}
 
+	int	GetMaxRevision()
+	{
+		return _MaxRevision;
+	}
+
 protected:
 	bool		_IsInit;
 	std::string	_UUID;
+	int			_MaxRevision;
 	Revisions	_revisions;
 
 	bool GetLine( std::ifstream &in, std::string &line )
@@ -208,15 +221,10 @@ protected:
 		int			Text_content_length	= 0;
 		int			Content_length		= 0;
 
-		for(;;)
+		while( GetKeyValue( in, key, value ) )
 		{
-			if( !GetKeyValue( in, key, value ) )
-				return false;
-
 			if( key == "Revision-number" )
 			{
-				std::cout << "parse revision: " << value << std::endl;
-
 				if( rev.number >= 0 )
 					_revisions.push_back( rev );
 
@@ -253,19 +261,19 @@ protected:
 
 					if( Prop_content_length + Text_content_length != Content_length )
 					{
-						std::cerr << "illiegal content length: " << Prop_content_length << " + " << Text_content_length << " != " << Content_length << std::endl;
+						std::cerr << "revision[" << value << "] illiegal content length: " << Prop_content_length << " + " << Text_content_length << " != " << Content_length << std::endl;
 						return false;
 					}
 
 					if( !GetContent( in, cnt.prop, Prop_content_length ) )
 					{
-						std::cerr << "failed read content." << std::endl;
+						std::cerr << "revision[" << value << "] failed read content." << std::endl;
 						return false;
 					}
 
 					if( !GetContent( in, cnt.text, Text_content_length ) )
 					{
-						std::cerr << "failed read content." << std::endl;
+						std::cerr << "revision[" << value << "] failed read content." << std::endl;
 						return false;
 					}
 
@@ -302,10 +310,19 @@ int main( int argc, char *argv[] )
 		return 1;
 	}
 
-	SVNDump	dmp1( argv[1] ), dmp2( argv[2] );
+	SVNDump	dmp1( argv[1] );
 
-	if( !dmp1 || !dmp2 )
+	if( !dmp1 )
 		return 1;
+
+	cout << argv[1] << ": max revision number: " << dmp1.GetMaxRevision() << endl;
+
+	SVNDump	dmp2( argv[2] );
+
+	if( !dmp2 )
+		return 1;
+
+	cout << argv[2] << ": max revision number: " << dmp2.GetMaxRevision() << endl;
 
 	if( dmp1 != dmp2 )
 	{
@@ -318,12 +335,12 @@ int main( int argc, char *argv[] )
 		SVNDump::Revision	*rev1	= dmp1[i];
 		SVNDump::Revision	*rev2	= dmp2[i];
 
-		cout << "check rev: " << i << endl;
 		if( !rev1 && !rev2 )
 			break;
 
 		if( !rev1 || !rev2 )
 		{
+			cout << "check rev: " << i << endl;
 			if( !rev1 )
 				cout << "	not found revision number in rev1." << endl;
 			if( !rev2 )
@@ -333,13 +350,22 @@ int main( int argc, char *argv[] )
 
 		if( rev1->contents.size() != rev2->contents.size() )
 		{
+			cout << "check rev: " << i << endl;
 			cout << "	different contents size: " << rev1->contents.size() << " != " << rev2->contents.size() << endl;
 			continue;
 		}
 
+		bool	first	= true;
 		for( size_t no = 0; no < rev1->contents.size(); ++no )
 			if( !( rev1->contents[no] == rev2->contents[no] ) )
+			{
+				if( first )
+				{
+					cout << "check rev: " << i << endl;
+					first	= false;
+				}
 				cout << "	different contents no: " << no << endl;
+			}
 	}
 
 	cout << "complete." << endl;
