@@ -27,7 +27,7 @@ namespace svn
 		Content();
 		~Content() = default;
 
-		bool operator ==( Content &right );
+		bool operator ==( const Content &right ) const;
 		void Clear();
 	};
 
@@ -35,6 +35,10 @@ namespace svn
 	{
 		int number;
 		std::vector< Content > contents;
+
+		Revision():number( -1 ) {}
+		~Revision() = default;
+		operator bool() const noexcept { return number >= 0; }
 	};
 
 	using Revisions = std::vector< Revision >;
@@ -48,7 +52,7 @@ namespace svn
 		operator bool() const noexcept { return _IsInit; }
 		bool operator ==( const Dump &r ) const noexcept { return UUID() == r.UUID(); }
 		bool operator !=( const Dump &r ) const noexcept { return !this->operator==( r ); }
-		Revision *operator []( int number );
+		Revision &operator []( int number );
 
 		Revisions::iterator begin() { return _revisions.begin(); }
 		Revisions::iterator end() { return _revisions.end(); }

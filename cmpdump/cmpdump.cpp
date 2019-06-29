@@ -36,8 +36,8 @@ int main( int argc, char *argv[] )
 
 		for( int i = 0; ; ++i )
 		{
-			auto rev1 = dmp1[i];
-			auto rev2 = dmp2[i];
+			const auto &rev1 = dmp1[i];
+			const auto &rev2 = dmp2[i];
 
 			if( !rev1 && !rev2 )
 				break;
@@ -52,16 +52,16 @@ int main( int argc, char *argv[] )
 				continue;
 			}
 
-			if( rev1->contents.size() != rev2->contents.size() )
+			if( rev1.contents.size() != rev2.contents.size() )
 			{
 				cout << "check rev: " << i << endl;
-				cout << "	different contents size: " << rev1->contents.size() << " != " << rev2->contents.size() << endl;
+				cout << "	different contents size: " << rev1.contents.size() << " != " << rev2.contents.size() << endl;
 				continue;
 			}
 
 			auto first = true;
-			for( auto no = size_t( 0 ); no < rev1->contents.size(); ++no )
-				if( !( rev1->contents[no] == rev2->contents[no] ) )
+			for( auto no = size_t( 0 ); no < rev1.contents.size(); ++no )
+				if( !( rev1.contents[no] == rev2.contents[no] ) )
 				{
 					if( first )
 					{

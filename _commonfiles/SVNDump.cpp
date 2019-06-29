@@ -5,7 +5,7 @@ svn::Content::Content()
 	: NodeCopyfromRev( 0 )
 {}
 
-bool svn::Content::operator ==( Content &right )
+bool svn::Content::operator ==( const Content &right ) const
 {
 	return NodePath == right.NodePath
 		&& NodeKind == right.NodeKind
@@ -43,12 +43,13 @@ svn::Dump::Dump( const char *path )
 	Init( path );
 }
 
-svn::Revision *svn::Dump::operator []( int number )
+svn::Revision &svn::Dump::operator []( int number )
 {
+	static auto empty = svn::Revision();
 	for( auto &it : _revisions )
 		if( it.number == number )
-			return &it;
-	return nullptr;
+			return it;
+	return empty;
 }
 
 bool svn::Dump::Init( const char *path )
@@ -143,11 +144,11 @@ svn::Content::prop_data_t svn::Dump::GetPropContent( std::ifstream &in, size_t l
 			{
 				key = GetTextContent( in, size );
 				continue;
-		}
+			}
 
 			auto value = GetTextContent( in, size );
 			props.insert( Content::prop_data_t::value_type( key, value ) );
-}
+		}
 
 	return props;
 }
@@ -196,10 +197,7 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 {
 	auto key = std::string();
 	auto value = std::string();
-
 	auto rev = Revision();
-	rev.number = -1;
-
 	auto cnt = Content();
 	auto Prop_content_length = 0;
 	auto Text_content_length = 0;
@@ -280,4 +278,7 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 			throw std::runtime_error( ss.str() );
 		}
 	}
+
+	if( rev.number >= 0 )
+		_revisions.push_back( rev );
 }
