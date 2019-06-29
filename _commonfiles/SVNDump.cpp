@@ -37,8 +37,12 @@ void svn::Content::Clear()
 
 ///////////////////////////////////////////////////////////////////////
 
+svn::Dump::Dump()
+	: _MaxRevision( -1 )
+{}
+
 svn::Dump::Dump( const char *path )
-	: _IsInit( false )
+	: _MaxRevision( -1 )
 {
 	Init( path );
 }
@@ -58,21 +62,20 @@ bool svn::Dump::Init( const char *path )
 	if( !CheckFormatVersion( in ) )
 		return false;
 
-	_IsInit = false;
-
 	auto line = std::string();
 	if( !GetKeyValue( in, line, _UUID ) || line != "UUID" )
 		return false;
 
+	_MaxRevision = -1;
+	_revisions.clear();
+
 	ParseRevision( in );
 
-	_MaxRevision = 0;
 	for( const auto &it : _revisions )
 		if( it.number > _MaxRevision )
 			_MaxRevision = it.number;
 
-	_IsInit = true;
-	return _IsInit;
+	return _MaxRevision >= 0;
 }
 
 std::string svn::Dump::GetLine( std::ifstream &in )

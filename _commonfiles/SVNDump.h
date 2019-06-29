@@ -46,10 +46,11 @@ namespace svn
 	class Dump
 	{
 	public:
+		Dump();
 		Dump( const char *path );
 		~Dump() = default;
 
-		operator bool() const noexcept { return _IsInit; }
+		operator bool() const noexcept { return _MaxRevision >= 0; }
 		bool operator ==( const Dump &r ) const noexcept { return UUID() == r.UUID(); }
 		bool operator !=( const Dump &r ) const noexcept { return !this->operator==( r ); }
 		Revision &operator []( int number );
@@ -64,9 +65,8 @@ namespace svn
 		int	GetMaxRevision() const noexcept { return _MaxRevision; }
 
 	protected:
-		bool _IsInit;
-		std::string _UUID;
 		int _MaxRevision;
+		std::string _UUID;
 		Revisions _revisions;
 
 		std::string GetLine( std::ifstream &in );
