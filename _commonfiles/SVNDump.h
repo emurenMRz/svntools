@@ -25,10 +25,16 @@ namespace svn
 		text_data_t text;
 
 		Content();
+		Content( const Content &r ) = default;
+		Content( Content &&r ) noexcept;
 		~Content() = default;
 
 		bool operator ==( const Content &right ) const;
 		void Clear();
+
+	private:
+		Content &operator =( const Content &r ) = delete;
+		Content &operator =( Content &&r ) = delete;
 	};
 
 	struct Revision

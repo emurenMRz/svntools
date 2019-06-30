@@ -5,6 +5,20 @@ svn::Content::Content()
 	: NodeCopyfromRev( 0 )
 {}
 
+svn::Content::Content( Content &&r ) noexcept
+	: NodePath( std::move( r.NodePath ) )
+	, NodeKind( std::move( r.NodeKind ) )
+	, NodeAction( std::move( r.NodeAction ) )
+	, NodeCopyfromRev( r.NodeCopyfromRev )
+	, NodeCopyfromPath( std::move( r.NodeCopyfromPath ) )
+	, TextContentMD5( std::move( r.TextContentMD5 ) )
+	, TextContentSHA1( std::move( r.TextContentSHA1 ) )
+	, TextCopySourceMD5( std::move( r.TextCopySourceMD5 ) )
+	, TextCopySourceSHA1( std::move( r.TextCopySourceSHA1 ) )
+	, prop( std::move( r.prop ) )
+	, text( std::move( r.text ) )
+{ r.NodeCopyfromRev = 0; }
+
 bool svn::Content::operator ==( const Content &right ) const
 {
 	return NodePath == right.NodePath
@@ -210,7 +224,11 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 		if( key == "Revision-number" )
 		{
 			if( rev.number >= 0 )
+			{
+				if( !cnt.NodePath.empty() )
+					rev.contents.emplace_back( std::move( cnt ) );
 				_revisions.push_back( rev );
+			}
 
 			rev.number = strtoul( value.c_str(), NULL, 10 );
 			rev.contents.clear();
@@ -220,7 +238,11 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 			if( key == "Prop-content-length" )
 				Prop_content_length = strtoul( value.c_str(), NULL, 10 );
 			else if( key == "Node-path" )
+			{
+				if( !cnt.NodePath.empty() )
+					rev.contents.emplace_back( std::move( cnt ) );
 				cnt.NodePath = value;
+			}
 			else if( key == "Node-kind" )
 				cnt.NodeKind = value;
 			else if( key == "Node-action" )
@@ -262,9 +284,7 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 					throw std::runtime_error( ss.str() );
 				}
 
-				rev.contents.push_back( cnt );
-
-				cnt.Clear();
+				rev.contents.emplace_back( std::move( cnt ) );
 				Prop_content_length = Text_content_length = 0;
 			}
 			else
@@ -283,5 +303,9 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 	}
 
 	if( rev.number >= 0 )
+	{
+		if( !cnt.NodePath.empty() )
+			rev.contents.emplace_back( std::move( cnt ) );
 		_revisions.push_back( rev );
+	}
 }
