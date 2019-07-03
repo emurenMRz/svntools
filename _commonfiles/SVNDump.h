@@ -1,5 +1,7 @@
 #pragma once
 
+//reference: svn.apache.org/repos/asf/subversion/trunk/notes/dump-load-format.txt
+
 #include <fstream>
 #include <string>
 #include <vector>
@@ -7,40 +9,46 @@
 
 namespace svn
 {
-	struct Content
-	{
-		using text_data_t = std::vector< uint8_t >;
-		using prop_data_t = std::map< text_data_t, text_data_t >;
+	using text_data_t = std::vector< uint8_t >;
+	using prop_data_t = std::map< text_data_t, text_data_t >;
 
+	struct Node
+	{
 		std::string	NodePath;
 		std::string	NodeKind;
 		std::string	NodeAction;
-		int			NodeCopyfromRev;
+		int         NodeCopyfromRev;
 		std::string	NodeCopyfromPath;
 		std::string	TextContentMD5;
 		std::string	TextContentSHA1;
 		std::string	TextCopySourceMD5;
 		std::string	TextCopySourceSHA1;
+		//Ver3
+		bool        TextDelta;
+		bool        PropDelta;
+		std::string	TextDeltaBaseMD5;
+		std::string	TextDeltaBaseSHA1;
 		prop_data_t prop;
 		text_data_t text;
 
-		Content();
-		Content( const Content &r ) = default;
-		Content( Content &&r ) noexcept;
-		~Content() = default;
+		Node();
+		Node( const Node &r ) = default;
+		Node( Node &&r ) noexcept;
+		~Node() = default;
 
-		bool operator ==( const Content &right ) const;
+		bool operator ==( const Node &right ) const;
 		void Clear();
 
 	private:
-		Content &operator =( const Content &r ) = delete;
-		Content &operator =( Content &&r ) = delete;
+		Node &operator =( const Node &r ) = delete;
+		Node &operator =( Node &&r ) = delete;
 	};
 
 	struct Revision
 	{
 		int number;
-		std::vector< Content > contents;
+		prop_data_t prop;
+		std::vector< Node > nodes;
 
 		Revision():number( -1 ) {}
 		~Revision() = default;
@@ -67,19 +75,22 @@ namespace svn
 		const Revisions::const_iterator cend() const { return _revisions.cend(); }
 
 		bool Init( const char *path );
-		const std::string &UUID() const noexcept { return _UUID; }
 		int	GetMaxRevision() const noexcept { return _MaxRevision; }
+		int GetFormatVersion() const noexcept { return _FormatVersion; }
+		const std::string &UUID() const noexcept { return _UUID; }
 
 	protected:
 		int _MaxRevision;
+		int _FormatVersion;
 		std::string _UUID;
 		Revisions _revisions;
 
 		std::string GetLine( std::ifstream &in );
 		bool GetKeyValue( std::ifstream &in, std::string &key, std::string &value );
-		Content::prop_data_t GetPropContent( std::ifstream &in, size_t length );
-		Content::text_data_t GetTextContent( std::ifstream &in, size_t length );
-		bool CheckFormatVersion( std::ifstream &in );
+		text_data_t GetTextData( std::ifstream &in, size_t length );
+		prop_data_t GetProperty( std::ifstream &in, size_t length );
+		text_data_t GetTextContent( std::ifstream &in, size_t length );
+		int CheckFormatVersion( std::ifstream &in );
 		void ParseRevision( std::ifstream &in );
 	};
 }

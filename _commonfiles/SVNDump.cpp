@@ -1,11 +1,13 @@
 #include "SVNDump.h"
 #include <sstream>
 
-svn::Content::Content()
+svn::Node::Node()
 	: NodeCopyfromRev( 0 )
+	, TextDelta( false )
+	, PropDelta( false )
 {}
 
-svn::Content::Content( Content &&r ) noexcept
+svn::Node::Node( Node &&r ) noexcept
 	: NodePath( std::move( r.NodePath ) )
 	, NodeKind( std::move( r.NodeKind ) )
 	, NodeAction( std::move( r.NodeAction ) )
@@ -15,11 +17,19 @@ svn::Content::Content( Content &&r ) noexcept
 	, TextContentSHA1( std::move( r.TextContentSHA1 ) )
 	, TextCopySourceMD5( std::move( r.TextCopySourceMD5 ) )
 	, TextCopySourceSHA1( std::move( r.TextCopySourceSHA1 ) )
+	, TextDelta( r.TextDelta )
+	, PropDelta( r.PropDelta )
+	, TextDeltaBaseMD5( std::move( r.TextDeltaBaseMD5 ) )
+	, TextDeltaBaseSHA1( std::move( r.TextDeltaBaseSHA1 ) )
 	, prop( std::move( r.prop ) )
 	, text( std::move( r.text ) )
-{ r.NodeCopyfromRev = 0; }
+{
+	r.NodeCopyfromRev = 0;
+	r.TextDelta = false;
+	r.PropDelta = false;
+}
 
-bool svn::Content::operator ==( const Content &right ) const
+bool svn::Node::operator ==( const Node &right ) const
 {
 	return NodePath == right.NodePath
 		&& NodeKind == right.NodeKind
@@ -30,11 +40,15 @@ bool svn::Content::operator ==( const Content &right ) const
 		&& TextContentSHA1 == right.TextContentSHA1
 		&& TextCopySourceMD5 == right.TextCopySourceMD5
 		&& TextCopySourceSHA1 == right.TextCopySourceSHA1
+		&& TextDelta == right.TextDelta
+		&& PropDelta == right.PropDelta
+		&& TextDeltaBaseMD5 == right.TextDeltaBaseMD5
+		&& TextDeltaBaseSHA1 == right.TextDeltaBaseSHA1
 		&& prop == right.prop
 		&& text == right.text;
 }
 
-void svn::Content::Clear()
+void svn::Node::Clear()
 {
 	NodePath.clear();
 	NodeKind.clear();
@@ -45,6 +59,10 @@ void svn::Content::Clear()
 	TextContentSHA1.clear();
 	TextCopySourceMD5.clear();
 	TextCopySourceSHA1.clear();
+	TextDelta = false;
+	PropDelta = false;
+	TextDeltaBaseMD5.clear();
+	TextDeltaBaseSHA1.clear();
 	prop.clear();
 	text.clear();
 }
@@ -53,10 +71,12 @@ void svn::Content::Clear()
 
 svn::Dump::Dump()
 	: _MaxRevision( -1 )
+	, _FormatVersion( 0 )
 {}
 
 svn::Dump::Dump( const char *path )
 	: _MaxRevision( -1 )
+	, _FormatVersion( 0 )
 {
 	Init( path );
 }
@@ -73,7 +93,9 @@ svn::Revision &svn::Dump::operator []( int number )
 bool svn::Dump::Init( const char *path )
 {
 	auto in = std::ifstream( path, std::ios_base::binary );
-	if( !CheckFormatVersion( in ) )
+	auto version = CheckFormatVersion( in );
+
+	if( !version )
 		return false;
 
 	auto line = std::string();
@@ -81,6 +103,7 @@ bool svn::Dump::Init( const char *path )
 		return false;
 
 	_MaxRevision = -1;
+	_FormatVersion = version;
 	_revisions.clear();
 
 	ParseRevision( in );
@@ -127,73 +150,87 @@ bool svn::Dump::GetKeyValue( std::ifstream &in, std::string &key, std::string &v
 	return true;
 }
 
-svn::Content::prop_data_t svn::Dump::GetPropContent( std::ifstream &in, size_t length )
+svn::text_data_t svn::Dump::GetTextData( std::ifstream &in, size_t length )
 {
+	auto content = text_data_t( length );
+	in.read( reinterpret_cast< char * >( content.data() ), length );
+	if( size_t( in.gcount() ) < length )
+		throw std::out_of_range( "less than the requested size." );
+	return content;
+}
+
+svn::prop_data_t svn::Dump::GetProperty( std::ifstream &in, size_t length )
+{
+	if( !length )
+		return prop_data_t();
+
 	if( in.eof() )
 		throw std::runtime_error( "end of file." );
 
-	auto ch = in.get();
-	while( ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' )
-		ch = in.get();
-	in.unget();
+	auto props = prop_data_t();
+	auto key = text_data_t();
+	auto content = GetTextData( in, length );
 
-	auto props = Content::prop_data_t();
-	auto key = Content::text_data_t();
+	for( auto head = content.data(); head < content.data() + content.size(); )
+	{
+		//key
+		auto tail = head;
+		while( *tail != '\n' )
+			++tail;
+		*tail = '\0';
 
-	if( length )
-		for( ;; )
+		if( std::equal( head, tail, "PROPS-END" ) )
 		{
-			auto line = GetLine( in );
-			if( line.empty() )
-				throw std::runtime_error( "not found PROPS-END" );
-
-			if( line == "PROPS-END" )
-				break;
-
-			auto type = line[0];
-			if( type != 'K' && type != 'V' )
-				throw std::runtime_error( "unknown Prop Header: " + line );
-
-			line.erase( 0, 2 );
-
-			auto size = strtoul( line.c_str(), nullptr, 10 );
-			if( type == 'K' )
-			{
-				key = GetTextContent( in, size );
-				continue;
-			}
-
-			auto value = GetTextContent( in, size );
-			props.insert( Content::prop_data_t::value_type( key, value ) );
+			if( tail - content.data() != content.size() - 1 )
+				throw std::runtime_error( "abnormal property size." );
+			break;
 		}
+
+		auto type = *head;
+		if( *head != 'K' && *head != 'V' && *head != 'D' )
+			throw std::runtime_error( "unknown property type: " + std::string( head, tail ) );
+
+		auto size = strtoul( reinterpret_cast< char * >( head + 2 ), nullptr, 10 );
+
+		//value
+		head = tail + 1;
+		tail = head + size;
+		if( *tail != '\n' )
+			throw std::out_of_range( "abnormal property size: " + std::string( head, tail ) );
+
+		if( type == 'K' )
+			key = text_data_t( head, tail );
+		else if( type == 'V' )
+			props.insert( prop_data_t::value_type( key, text_data_t( head, tail ) ) );
+		else
+			props.insert( prop_data_t::value_type( text_data_t( head, tail ), text_data_t( '*' ) ) );
+		head = tail + 1;
+	}
 
 	return props;
 }
 
-svn::Content::text_data_t svn::Dump::GetTextContent( std::ifstream &in, size_t length )
+svn::text_data_t svn::Dump::GetTextContent( std::ifstream &in, size_t length )
 {
+	if( !length )
+		return text_data_t();
+
 	if( in.eof() )
 		throw std::runtime_error( "end of file." );
 
-	auto ch = in.get();
-	while( ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n' )
-		ch = in.get();
-	in.unget();
-
-	auto content = Content::text_data_t( length );
-	#if defined(SKIP_READ_CONTENT)
+#if defined(SKIP_READ_CONTENT)
+	auto content = text_data_t( length );
 	in.seekg( length, std::ios_base::cur );
-	#else
-	in.read( (char * )content.data(), length );
-	#endif
-
 	return content;
+#else
+	return GetTextData( in, length );
+#endif
 }
 
-bool svn::Dump::CheckFormatVersion( std::ifstream &in )
+int svn::Dump::CheckFormatVersion( std::ifstream &in )
 {
 	if( !in )
-		return false;
+		return 0;
 
 	auto key = std::string();
 	auto value = std::string();
@@ -204,10 +241,11 @@ bool svn::Dump::CheckFormatVersion( std::ifstream &in )
 	if( key != "SVN-fs-dump-format-version" )
 		throw std::runtime_error( "unknown format: " + key );
 
-	if( strtoul( value.c_str(), NULL, 10 ) != 2 )
-		throw std::runtime_error( "unknown version: " + value );
+	auto version = strtoul( value.c_str(), NULL, 10 );
+	if( version < 2 || version > 3 )
+		throw std::runtime_error( "unsupport version: " + value );
 
-	return true;
+	return version;
 }
 
 void svn::Dump::ParseRevision( std::ifstream &in )
@@ -215,9 +253,13 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 	auto key = std::string();
 	auto value = std::string();
 	auto rev = Revision();
-	auto cnt = Content();
+	auto node = Node();
 	auto Prop_content_length = 0;
 	auto Text_content_length = 0;
+
+	enum ContextType
+	{ Root, Revision, Node };
+	auto parse_context = ContextType::Root;
 
 	while( GetKeyValue( in, key, value ) )
 	{
@@ -225,42 +267,57 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 		{
 			if( rev.number >= 0 )
 			{
-				if( !cnt.NodePath.empty() )
-					rev.contents.emplace_back( std::move( cnt ) );
+				if( !node.NodePath.empty() )
+					rev.nodes.emplace_back( std::move( node ) );
 				_revisions.push_back( rev );
 			}
 
 			rev.number = strtoul( value.c_str(), NULL, 10 );
-			rev.contents.clear();
+			rev.prop.clear();
+			rev.nodes.clear();
+			parse_context = ContextType::Revision;
 		}
 		else if( rev.number >= 0 )
 		{
-			if( key == "Prop-content-length" )
-				Prop_content_length = strtoul( value.c_str(), NULL, 10 );
-			else if( key == "Node-path" )
+			if( key == "Node-path" )
 			{
-				if( !cnt.NodePath.empty() )
-					rev.contents.emplace_back( std::move( cnt ) );
-				cnt.NodePath = value;
+				if( !node.NodePath.empty() )
+					rev.nodes.emplace_back( std::move( node ) );
+				node.NodePath = value;
+				parse_context = ContextType::Node;
 			}
 			else if( key == "Node-kind" )
-				cnt.NodeKind = value;
+				node.NodeKind = value;
 			else if( key == "Node-action" )
-				cnt.NodeAction = value;
+				node.NodeAction = value;
+
 			else if( key == "Node-copyfrom-rev" )
-				cnt.NodeCopyfromRev = strtoul( value.c_str(), NULL, 10 );
+				node.NodeCopyfromRev = strtoul( value.c_str(), NULL, 10 );
 			else if( key == "Node-copyfrom-path" )
-				cnt.NodeCopyfromPath = value;
+				node.NodeCopyfromPath = value;
+			else if( key == "Text-copy-source-md5" )
+				node.TextCopySourceMD5 = value;
+			else if( key == "Text-copy-source-sha1" )
+				node.TextCopySourceSHA1 = value;
+
+			else if( key == "Text-content-md5" )
+				node.TextContentMD5 = value;
+			else if( key == "Text-content-sha1" )
+				node.TextContentSHA1 = value;
+
+			else if( key == "Text-delta" )
+				node.TextDelta = value == "true";
+			else if( key == "Prop-delta" )
+				node.PropDelta = value == "true";
+			else if( key == "Text-delta-base-md5" )
+				node.TextDeltaBaseMD5 = value;
+			else if( key == "Text-delta-base-sha1" )
+				node.TextDeltaBaseSHA1 = value;
+
 			else if( key == "Text-content-length" )
 				Text_content_length = strtoul( value.c_str(), NULL, 10 );
-			else if( key == "Text-content-md5" )
-				cnt.TextContentMD5 = value;
-			else if( key == "Text-content-sha1" )
-				cnt.TextContentSHA1 = value;
-			else if( key == "Text-copy-source-md5" )
-				cnt.TextCopySourceMD5 = value;
-			else if( key == "Text-copy-source-sha1" )
-				cnt.TextCopySourceSHA1 = value;
+			else if( key == "Prop-content-length" )
+				Prop_content_length = strtoul( value.c_str(), NULL, 10 );
 			else if( key == "Content-length" )
 			{
 				auto Content_length = strtoul( value.c_str(), NULL, 10 );
@@ -272,10 +329,24 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 					throw std::runtime_error( ss.str() );
 				}
 
+				auto empty_line = in.get();
+				if( empty_line != '\n' )
+				{
+					auto ss = std::stringstream();
+					ss << "revision[" << rev.number << "] empty line is required: " << empty_line;
+					throw std::runtime_error( ss.str() );
+				}
+
+				//read body
 				try
 				{
-					cnt.prop = GetPropContent( in, Prop_content_length );
-					cnt.text = GetTextContent( in, Text_content_length );
+					if( parse_context == ContextType::Revision )
+						rev.prop = GetProperty( in, Prop_content_length );
+					else
+					{
+						node.prop = GetProperty( in, Prop_content_length );
+						node.text = GetTextContent( in, Text_content_length );
+					}
 				}
 				catch( const std::exception &e )
 				{
@@ -284,7 +355,6 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 					throw std::runtime_error( ss.str() );
 				}
 
-				rev.contents.emplace_back( std::move( cnt ) );
 				Prop_content_length = Text_content_length = 0;
 			}
 			else
@@ -304,8 +374,8 @@ void svn::Dump::ParseRevision( std::ifstream &in )
 
 	if( rev.number >= 0 )
 	{
-		if( !cnt.NodePath.empty() )
-			rev.contents.emplace_back( std::move( cnt ) );
+		if( !node.NodePath.empty() )
+			rev.nodes.emplace_back( std::move( node ) );
 		_revisions.push_back( rev );
 	}
 }

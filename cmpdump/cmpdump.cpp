@@ -21,12 +21,12 @@ int main( int argc, char *argv[] )
 		auto dmp1 = svn::Dump( argv[1] );
 		if( !dmp1 )
 			return 1;
-		cout << argv[1] << ": max revision number: " << dmp1.GetMaxRevision() << endl;
+		cout << argv[1] << ": max revision number: " << dmp1.GetMaxRevision() << ", format version: " << dmp1.GetFormatVersion() << endl;
 
 		auto dmp2 = svn::Dump( argv[2] );
 		if( !dmp2 )
 			return 1;
-		cout << argv[2] << ": max revision number: " << dmp2.GetMaxRevision() << endl;
+		cout << argv[2] << ": max revision number: " << dmp2.GetMaxRevision() << ", format version: " << dmp2.GetFormatVersion() << endl;
 
 		if( dmp1 != dmp2 )
 		{
@@ -52,16 +52,22 @@ int main( int argc, char *argv[] )
 				continue;
 			}
 
-			if( rev1.contents.size() != rev2.contents.size() )
+			if( rev1.prop != rev2.prop )
+			{
+				cout << "check rev: " << i << "; different property." << endl;
+				continue;
+			}
+
+			if( rev1.nodes.size() != rev2.nodes.size() )
 			{
 				cout << "check rev: " << i << endl;
-				cout << "	different contents size: " << rev1.contents.size() << " != " << rev2.contents.size() << endl;
+				cout << "	different nodes size: " << rev1.nodes.size() << " != " << rev2.nodes.size() << endl;
 				continue;
 			}
 
 			auto first = true;
-			for( auto no = size_t( 0 ); no < rev1.contents.size(); ++no )
-				if( !( rev1.contents[no] == rev2.contents[no] ) )
+			for( auto no = size_t( 0 ); no < rev1.nodes.size(); ++no )
+				if( !( rev1.nodes[no] == rev2.nodes[no] ) )
 				{
 					if( first )
 					{
@@ -78,8 +84,6 @@ int main( int argc, char *argv[] )
 	}
 
 	cout << "complete." << endl;
-
-
 
 	return 0;
 }
