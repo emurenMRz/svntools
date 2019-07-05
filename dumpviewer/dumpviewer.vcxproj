@@ -175,6 +175,7 @@
     <ClInclude Include="ListView.h" />
     <ClInclude Include="misc.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="RevisionList.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="WICManager.h" />
   </ItemGroup>
@@ -184,6 +185,7 @@
     <ClCompile Include="dumpviewer.cpp" />
     <ClCompile Include="ListView.cpp" />
     <ClCompile Include="misc.cpp" />
+    <ClCompile Include="RevisionList.cpp" />
     <ClCompile Include="WICManager.cpp" />
   </ItemGroup>
   <ItemGroup>

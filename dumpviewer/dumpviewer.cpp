@@ -2,6 +2,7 @@
 #include "dumpviewer.h"
 #include "ListView.h"
 #include "DetailWindow.h"
+#include "RevisionList.h"
 #include "SVNDump.h"
 #include "misc.h"
 #include <sstream>
@@ -24,7 +25,6 @@ WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
 
 svn::Dump g_SVNDump;
-ListView g_RevisionList;
 ListView g_ContentsList;
 std::map<std::string, int> g_GroupNumber;
 int g_GroupNumberEtc;
@@ -271,16 +271,10 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 
 int OnCreate( HWND hWnd )
 {
-	if( !g_RevisionList.Create( hWnd, IDC_REVISION_LIST ) ||
+	if( !RevisionList::Create( hWnd ) ||
 		!g_ContentsList.Create( hWnd, IDC_CONTENTS_LIST ) ||
 		!DetailWindow::Create( hWnd ) )
 		return -1;
-
-	g_RevisionList.AddColumn( TEXT( "Revision" ), 80 );
-	g_RevisionList.AddColumn( TEXT( "Actions" ), 160 );
-	g_RevisionList.AddColumn( TEXT( "Author" ), 100 );
-	g_RevisionList.AddColumn( TEXT( "Date(GMT)" ), 150 );
-	g_RevisionList.AddColumn( TEXT( "Message" ), 1000 );
 
 	g_ContentsList.AddColumn( TEXT( "Action" ), 50 );
 	g_ContentsList.AddColumn( TEXT( "Kind" ), 50 );
@@ -302,7 +296,7 @@ void OnSize( WORD width, WORD height, double h_border_pos, double v_border_pos )
 {
 	auto border = int( height * h_border_pos );
 	auto separate = int( width * v_border_pos );
-	g_RevisionList.Resize( 0, 0, width, border - BORDER_WIDTH );
+	RevisionList::Resize( RECT{0, 0, width, border - BORDER_WIDTH} );
 	g_ContentsList.Resize( 0, border + BORDER_WIDTH, separate - BORDER_WIDTH, height - border );
 	DetailWindow::Resize( RECT{separate + BORDER_WIDTH, border + BORDER_WIDTH, width - separate - BORDER_WIDTH, height - border - BORDER_WIDTH} );
 }
@@ -451,47 +445,10 @@ void OnDropFiles( HWND hWnd, HDROP drop )
 		return;
 	}
 
-	g_RevisionList.Clear();
+	RevisionList::Clear();
 	g_ContentsList.Clear();
 	DetailWindow::Clear();
-
-	g_RevisionList.SetRedraw( false );
-	for( const auto &r : g_SVNDump )
-	{
-		TCHAR name[16];
-		wsprintf( name, L"%d", r.number );
-		auto item_no = g_RevisionList.AddItem( name, r.number );
-		if( item_no < 0 )
-			continue;
-
-		if( !r.nodes.empty() )
-		{
-			auto actmap = std::map< std::string, int >();
-			for( const auto &n : r.nodes )
-				++actmap[n.NodeAction];
-
-			auto actions = std::stringstream();
-			for( const auto &act : actmap )
-			{
-				if( !actions.str().empty() )
-					actions << ", ";
-				actions << act.first << ": " << act.second;
-			}
-			g_RevisionList.SetSubItem( item_no, 1, toWide( actions.str() ).c_str() );
-		}
-
-		auto author = SearchProp( r.prop, "svn:author" );
-		auto date = SearchProp( r.prop, "svn:date" );
-		auto log = SearchProp( r.prop, "svn:log" );
-
-		date.replace( date.find_first_of( L'T' ), 1, L" " );
-		date.erase( date.find_last_of( L'.' ) );
-
-		g_RevisionList.SetSubItem( item_no, 2, author.c_str() );
-		g_RevisionList.SetSubItem( item_no, 3, date.c_str() );
-		g_RevisionList.SetSubItem( item_no, 4, log.c_str() );
-	}
-	g_RevisionList.SetRedraw( true );
+	RevisionList::Build( g_SVNDump );
 }
 
 INT_PTR CALLBACK About( HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam )
