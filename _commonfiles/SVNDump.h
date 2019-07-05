@@ -37,7 +37,7 @@ namespace svn
 		~Node() = default;
 
 		bool operator ==( const Node &right ) const;
-		void Clear();
+		void clear();
 
 	private:
 		Node &operator =( const Node &r ) = delete;
@@ -78,6 +78,7 @@ namespace svn
 		int	GetMaxRevision() const noexcept { return _MaxRevision; }
 		int GetFormatVersion() const noexcept { return _FormatVersion; }
 		const std::string &UUID() const noexcept { return _UUID; }
+		size_t GetRevisionCount() const noexcept { return _revisions.size(); }
 
 	protected:
 		int _MaxRevision;

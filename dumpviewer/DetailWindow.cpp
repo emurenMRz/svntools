@@ -104,7 +104,6 @@ namespace DetailWindow
 			return;
 		}
 
-		auto mime_type = SearchProp( node->prop, "svn:mime-type" );
 		try
 		{
 			g_ImageBuffer = g_WICManager.Load( node->text.data(), node->text.size() );
@@ -115,6 +114,7 @@ namespace DetailWindow
 		catch( const std::exception & )
 		{
 			g_TextBuffer.clear();
+			auto mime_type = SearchProp( node->prop, "svn:mime-type" );
 			if( mime_type.empty() )
 			{
 				g_TextBuffer = node->text;

@@ -48,7 +48,7 @@ bool svn::Node::operator ==( const Node &right ) const
 		&& text == right.text;
 }
 
-void svn::Node::Clear()
+void svn::Node::clear()
 {
 	NodePath.clear();
 	NodeKind.clear();
