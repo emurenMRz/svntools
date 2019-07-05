@@ -3,6 +3,7 @@
 #include "ListView.h"
 #include "DetailWindow.h"
 #include "RevisionList.h"
+#include "NodeList.h"
 #include "SVNDump.h"
 #include "misc.h"
 #include <sstream>
@@ -25,9 +26,6 @@ WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
 
 svn::Dump g_SVNDump;
-ListView g_ContentsList;
-std::map<std::string, int> g_GroupNumber;
-int g_GroupNumberEtc;
 
 enum ActiveBorderType
 { None, Horizon, Vertical };
@@ -272,22 +270,9 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 int OnCreate( HWND hWnd )
 {
 	if( !RevisionList::Create( hWnd ) ||
-		!g_ContentsList.Create( hWnd, IDC_CONTENTS_LIST ) ||
+		!NodeList::Create( hWnd ) ||
 		!DetailWindow::Create( hWnd ) )
 		return -1;
-
-	g_ContentsList.AddColumn( TEXT( "Action" ), 50 );
-	g_ContentsList.AddColumn( TEXT( "Kind" ), 50 );
-	g_ContentsList.AddColumn( TEXT( "Path" ), 300 );
-	g_ContentsList.AddColumn( TEXT( "Copyfrom" ), 400 );
-	g_ContentsList.AddColumn( TEXT( "Delta" ), 200 );
-	g_ContentsList.EnableGroupView( true );
-
-	g_GroupNumber["add"] = g_ContentsList.AddGroup( L"add", L"" );
-	g_GroupNumber["change"] = g_ContentsList.AddGroup( L"change", L"" );
-	g_GroupNumber["delete"] = g_ContentsList.AddGroup( L"delete", L"" );
-	g_GroupNumber["replace"] = g_ContentsList.AddGroup( L"replace", L"" );
-	g_GroupNumberEtc = g_ContentsList.AddGroup( L"etc", L"" );
 
 	return 0;
 }
@@ -297,7 +282,7 @@ void OnSize( WORD width, WORD height, double h_border_pos, double v_border_pos )
 	auto border = int( height * h_border_pos );
 	auto separate = int( width * v_border_pos );
 	RevisionList::Resize( RECT{0, 0, width, border - BORDER_WIDTH} );
-	g_ContentsList.Resize( 0, border + BORDER_WIDTH, separate - BORDER_WIDTH, height - border );
+	NodeList::Resize( RECT{0, border + BORDER_WIDTH, separate - BORDER_WIDTH, height - border} );
 	DetailWindow::Resize( RECT{separate + BORDER_WIDTH, border + BORDER_WIDTH, width - separate - BORDER_WIDTH, height - border - BORDER_WIDTH} );
 }
 
@@ -311,51 +296,7 @@ LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, const LPNMLISTVIEW lv )
 		case LVN_ITEMCHANGED:
 			if( lv->uNewState & LVIS_SELECTED )
 				if( lv->iItem >= 0 )
-				{
-					const auto &r = g_SVNDump[int( lv->lParam )];
-					DetailWindow::SetTextData( SearchProp( r.prop, "svn:log" ) );
-
-					g_ContentsList.Clear();
-					g_ContentsList.SetRedraw( false );
-					g_ContentsList.EnableGroupView( false );
-					for( const auto &n : r.nodes )
-						if( !n.NodeAction.empty() )
-						{
-							auto group = g_GroupNumberEtc;
-							auto find = g_GroupNumber.find( n.NodeAction );
-							if( find != g_GroupNumber.end() )
-								group = ( *find ).second;
-
-							auto item_no = g_ContentsList.AddItem( toWide( n.NodeAction ).c_str(), reinterpret_cast< LPARAM >( &n ), group );
-							if( item_no < 0 )
-								continue;
-							g_ContentsList.SetSubItem( item_no, 1, toWide( n.NodeKind ).c_str() );
-							g_ContentsList.SetSubItem( item_no, 2, toWide( n.NodePath ).c_str() );
-
-							if( n.NodeCopyfromRev > 0 )
-							{
-								auto ss = std::wstringstream();
-								ss << toWide( n.NodeCopyfromPath ) << L", rev: " << n.NodeCopyfromRev;
-								g_ContentsList.SetSubItem( item_no, 3, ss.str().c_str() );
-							}
-
-							if( n.PropDelta || n.TextDelta )
-							{
-								auto ss = std::wstringstream();
-								if( n.PropDelta )
-									ss << L"prop";
-								if( n.TextDelta )
-								{
-									if( n.PropDelta )
-										ss << L", ";
-									ss << L"text";
-								}
-								g_ContentsList.SetSubItem( item_no, 4, ss.str().c_str() );
-							}
-						}
-					g_ContentsList.SetRedraw( true );
-					g_ContentsList.EnableGroupView( true );
-				}
+					NodeList::Build( g_SVNDump[int( lv->lParam )] );
 			break;
 
 			//case LVN_GETDISPINFO:
@@ -387,7 +328,7 @@ LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, const LPNMLISTVIEW lv )
 				auto lpia = reinterpret_cast< LPNMITEMACTIVATE >( lv );
 				if( lpia->iItem < 0 )
 					break;
-				const auto node = reinterpret_cast< const svn::Node * >( g_ContentsList.GetItemData( lpia->iItem ) );
+				const auto node = NodeList::GetNode( lpia->iItem );
 				if( node && node->NodeKind == "file" )
 					SaveToFile( hWnd, node );
 			}
@@ -446,7 +387,7 @@ void OnDropFiles( HWND hWnd, HDROP drop )
 	}
 
 	RevisionList::Clear();
-	g_ContentsList.Clear();
+	NodeList::Clear();
 	DetailWindow::Clear();
 	RevisionList::Build( g_SVNDump );
 }
