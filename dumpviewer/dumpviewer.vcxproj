@@ -169,17 +169,21 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\_commonfiles\SVNDump.h" />
+    <ClInclude Include="DetailWindow.h" />
     <ClInclude Include="dumpviewer.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="ListView.h" />
+    <ClInclude Include="misc.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="WICManager.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\_commonfiles\SVNDump.cpp" />
+    <ClCompile Include="DetailWindow.cpp" />
     <ClCompile Include="dumpviewer.cpp" />
     <ClCompile Include="ListView.cpp" />
+    <ClCompile Include="misc.cpp" />
     <ClCompile Include="WICManager.cpp" />
   </ItemGroup>
   <ItemGroup>

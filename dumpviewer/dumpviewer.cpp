@@ -1,12 +1,12 @@
 #include "framework.h"
 #include "dumpviewer.h"
 #include "ListView.h"
+#include "DetailWindow.h"
 #include "SVNDump.h"
-#include "WICManager.h"
-#include <iomanip>
+#include "misc.h"
 #include <sstream>
 #include <map>
-#include <filesystem>
+#include <objbase.h>
 #include <shellapi.h>
 #include <commctrl.h>
 #include <commdlg.h>
@@ -26,22 +26,11 @@ WCHAR szWindowClass[MAX_LOADSTRING];
 svn::Dump g_SVNDump;
 ListView g_RevisionList;
 ListView g_ContentsList;
-HWND g_DetailWindow;
-HWND g_BitmapWindow;
-HFONT g_DetailFont;
 std::map<std::string, int> g_GroupNumber;
 int g_GroupNumberEtc;
 
 enum ActiveBorderType
 { None, Horizon, Vertical };
-
-enum DetailCharsetType
-{ UTF8, Unicode, ShiftJIS };
-
-DetailCharsetType g_DetailCharsetType;
-WICManager g_WICManager;
-WICManager::buffer_t g_ImageBuffer;
-svn::text_data_t g_DetailText;
 
 ATOM MyRegisterClass( HINSTANCE hInstance );
 BOOL InitInstance( HINSTANCE, int );
@@ -50,15 +39,6 @@ void OnSize( WORD width, WORD height, double h_border_pos, double v_border_pos )
 int OnCreate( HWND hWnd );
 LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, const LPNMLISTVIEW lv );
 void OnDropFiles( HWND hWnd, HDROP drop );
-std::wstring toWide( const void *str, size_t length );
-std::wstring toWide( const std::string &str );
-std::wstring SJIStoWide( const void *str, size_t length );
-std::wstring SearchProp( const svn::prop_data_t &props, const std::string name );
-void SetDetailBinary( const void *data, size_t size );
-void SetDetailText( std::wstring text );
-void SetDetailCharset( HWND hWnd, DetailCharsetType type );
-void SetDetailTabstop( HWND hWnd, int tabstop );
-void SaveToFile( HWND hWnd, const svn::Node *node );
 INT_PTR CALLBACK About( HWND, UINT, WPARAM, LPARAM );
 
 int APIENTRY wWinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow )
@@ -149,10 +129,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 		return OnCreate( hWnd );
 
 	case WM_DESTROY:
-		SendMessage( g_DetailWindow, WM_SETFONT, 0, MAKELPARAM( TRUE, 0 ) );
-		if( g_DetailFont )
-			DeleteObject( g_DetailFont );
-		g_WICManager.Release();
+		DetailWindow::Destroy();
 		PostQuitMessage( 0 );
 		break;
 
@@ -163,43 +140,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 		break;
 
 	case WM_DRAWITEM:
-		{
-			auto dis = LPDRAWITEMSTRUCT( lParam );
-			if( dis->CtlID == IDC_CONTENTS_BITMAP && !g_ImageBuffer.empty() )
-				if( dis->itemAction & ODA_DRAWENTIRE )
-				{
-					auto info = LPBITMAPINFOHEADER( g_ImageBuffer.data() );
-					auto bits = g_ImageBuffer.data() + sizeof( BITMAPINFOHEADER );
-					const auto sw = info->biWidth;
-					const auto sh = std::abs( info->biHeight );
-					const auto aspect = double( sw ) / sh;
-					const auto dw = dis->rcItem.right - dis->rcItem.left;
-					const auto dh = dis->rcItem.bottom - dis->rcItem.top;
-					auto w = dw;
-					auto h = dh;
-					if( aspect >= 1.0 )
-					{
-						auto wh = w / aspect + .5;
-						if( wh <= h )
-							h = decltype( h )( wh );
-						else
-							w = decltype( w )( h * aspect + .5 );
-					}
-					else
-					{
-						auto ww = h * aspect + .5;
-						if( ww <= w )
-							w = decltype( w )( ww );
-						else
-							h = decltype( h )( w / aspect + .5 );
-					}
-					FillRect( dis->hDC, &dis->rcItem, (HBRUSH )GetStockObject( BLACK_BRUSH ) );
-					SetStretchBltMode( dis->hDC, HALFTONE );
-					StretchDIBits( dis->hDC, ( dw - w ) / 2, ( dh - h ) / 2, w, h, 0, 0, sw, sh, bits, reinterpret_cast< const LPBITMAPINFO >( info ), DIB_RGB_COLORS, SRCCOPY );
-					return TRUE;
-				}
-		}
-		break;
+		return DetailWindow::Draw( LPDRAWITEMSTRUCT( lParam ) );
 
 	case WM_NOTIFY:
 		return OnNotify( hWnd, LPNMHDR( lParam ), LPNMLISTVIEW( lParam ) );
@@ -207,12 +148,12 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 	case WM_COMMAND:
 		switch( LOWORD( wParam ) )
 		{
-		case ID_CHARSET_UTF8: SetDetailCharset( hWnd, DetailCharsetType::UTF8 ); break;
-		case ID_CHARSET_UNICODE: SetDetailCharset( hWnd, DetailCharsetType::Unicode ); break;
-		case ID_CHARSET_SHIFTJIS: SetDetailCharset( hWnd, DetailCharsetType::ShiftJIS ); break;
-		case ID_TABSTOP_2: SetDetailTabstop( hWnd, 2 ); break;
-		case ID_TABSTOP_4: SetDetailTabstop( hWnd, 4 ); break;
-		case ID_TABSTOP_8: SetDetailTabstop( hWnd, 8 ); break;
+		case ID_CHARSET_UTF8: DetailWindow::SetCharset( hWnd, DetailWindow::CharsetType::UTF8 ); break;
+		case ID_CHARSET_UNICODE: DetailWindow::SetCharset( hWnd, DetailWindow::CharsetType::Unicode ); break;
+		case ID_CHARSET_SHIFTJIS: DetailWindow::SetCharset( hWnd, DetailWindow::CharsetType::ShiftJIS ); break;
+		case ID_TABSTOP_2: DetailWindow::SetTabstop( hWnd, 2 ); break;
+		case ID_TABSTOP_4: DetailWindow::SetTabstop( hWnd, 4 ); break;
+		case ID_TABSTOP_8: DetailWindow::SetTabstop( hWnd, 8 ); break;
 
 		case IDM_ABOUT:
 			DialogBox( hInst, MAKEINTRESOURCE( IDD_ABOUTBOX ), hWnd, About );
@@ -330,24 +271,10 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 
 int OnCreate( HWND hWnd )
 {
-	if( !g_WICManager.Create() )
-		return -1;
-
 	if( !g_RevisionList.Create( hWnd, IDC_REVISION_LIST ) ||
-		!g_ContentsList.Create( hWnd, IDC_CONTENTS_LIST ) )
+		!g_ContentsList.Create( hWnd, IDC_CONTENTS_LIST ) ||
+		!DetailWindow::Create( hWnd ) )
 		return -1;
-
-	g_DetailWindow = CreateWindowEx( 0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | ES_LEFT | ES_MULTILINE | ES_READONLY, 0, 0, 0, 0, hWnd, (HMENU )IDC_CONTENTS_DETAIL, hInst, 0 );
-	if( !g_DetailWindow )
-		return -1;
-
-	g_BitmapWindow = CreateWindowEx( 0, L"STATIC", L"", WS_CHILD | SS_OWNERDRAW, 0, 0, 0, 0, hWnd, (HMENU )IDC_CONTENTS_BITMAP, hInst, 0 );
-	if( !g_BitmapWindow )
-		return -1;
-
-	g_DetailFont = CreateFont( 16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_TT_ONLY_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_NATURAL_QUALITY, FIXED_PITCH, L"Terminal" );
-	if( g_DetailFont )
-		SendMessage( g_DetailWindow, WM_SETFONT, (WPARAM )g_DetailFont, MAKELPARAM( TRUE, 0 ) );
 
 	g_RevisionList.AddColumn( TEXT( "Revision" ), 80 );
 	g_RevisionList.AddColumn( TEXT( "Actions" ), 160 );
@@ -368,9 +295,6 @@ int OnCreate( HWND hWnd )
 	g_GroupNumber["replace"] = g_ContentsList.AddGroup( L"replace", L"" );
 	g_GroupNumberEtc = g_ContentsList.AddGroup( L"etc", L"" );
 
-	SetDetailCharset( hWnd, DetailCharsetType::UTF8 );
-	SetDetailTabstop( hWnd, 4 );
-
 	return 0;
 }
 
@@ -380,8 +304,7 @@ void OnSize( WORD width, WORD height, double h_border_pos, double v_border_pos )
 	auto separate = int( width * v_border_pos );
 	g_RevisionList.Resize( 0, 0, width, border - BORDER_WIDTH );
 	g_ContentsList.Resize( 0, border + BORDER_WIDTH, separate - BORDER_WIDTH, height - border );
-	SetWindowPos( g_DetailWindow, 0, separate + BORDER_WIDTH, border + BORDER_WIDTH, width - separate - BORDER_WIDTH, height - border - BORDER_WIDTH, SWP_NOZORDER );
-	SetWindowPos( g_BitmapWindow, 0, separate + BORDER_WIDTH, border + BORDER_WIDTH, width - separate - BORDER_WIDTH, height - border - BORDER_WIDTH, SWP_NOCOPYBITS | SWP_NOZORDER );
+	DetailWindow::Resize( RECT{separate + BORDER_WIDTH, border + BORDER_WIDTH, width - separate - BORDER_WIDTH, height - border - BORDER_WIDTH} );
 }
 
 LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, const LPNMLISTVIEW lv )
@@ -396,7 +319,7 @@ LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, const LPNMLISTVIEW lv )
 				if( lv->iItem >= 0 )
 				{
 					const auto &r = g_SVNDump[int( lv->lParam )];
-					SetDetailText( SearchProp( r.prop, "svn:log" ) );
+					DetailWindow::SetTextData( SearchProp( r.prop, "svn:log" ) );
 
 					g_ContentsList.Clear();
 					g_ContentsList.SetRedraw( false );
@@ -462,46 +385,7 @@ LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, const LPNMLISTVIEW lv )
 		{
 		case LVN_ITEMCHANGED:
 			if( lv->uNewState & LVIS_SELECTED )
-			{
-				const auto node = reinterpret_cast< const svn::Node * >( lv->lParam );
-				if( !node->text.empty() && node->NodeKind == "file" )
-				{
-					auto mime_type = SearchProp( node->prop, "svn:mime-type" );
-					try
-					{
-						g_ImageBuffer = g_WICManager.Load( node->text.data(), node->text.size() );
-						ShowWindow( g_DetailWindow, SW_HIDE );
-						ShowWindow( g_BitmapWindow, SW_SHOWNORMAL );
-						InvalidateRect( g_BitmapWindow, NULL, TRUE );
-					}
-					catch( const std::exception & )
-					{
-						g_DetailText.clear();
-						if( mime_type.empty() )
-						{
-							g_DetailText = node->text;
-							switch( g_DetailCharsetType )
-							{
-							case DetailCharsetType::UTF8: SetDetailText( toWide( node->text.data(), node->text.size() ) ); break;
-							case DetailCharsetType::Unicode: SetDetailText( std::wstring( node->text.cbegin(), node->text.cend() ) ); break;
-							case DetailCharsetType::ShiftJIS: SetDetailText( SJIStoWide( node->text.data(), node->text.size() ) ); break;
-							}
-						}
-						else if( mime_type == L"application/octet-stream" )
-							SetDetailBinary( node->text.data(), node->text.size() );
-						else
-							SetDetailText( L"" );
-						ShowWindow( g_DetailWindow, SW_SHOWNORMAL );
-						ShowWindow( g_BitmapWindow, SW_HIDE );
-					}
-				}
-				else
-				{
-					ShowWindow( g_DetailWindow, SW_SHOWNORMAL );
-					ShowWindow( g_BitmapWindow, SW_HIDE );
-					SetDetailText( L"" );
-				}
-			}
+				DetailWindow::SetNode( reinterpret_cast< const svn::Node * >( lv->lParam ) );
 			break;
 
 		case NM_DBLCLK:
@@ -569,7 +453,7 @@ void OnDropFiles( HWND hWnd, HDROP drop )
 
 	g_RevisionList.Clear();
 	g_ContentsList.Clear();
-	SetDetailText( L"" );
+	DetailWindow::Clear();
 
 	g_RevisionList.SetRedraw( false );
 	for( const auto &r : g_SVNDump )
@@ -608,132 +492,6 @@ void OnDropFiles( HWND hWnd, HDROP drop )
 		g_RevisionList.SetSubItem( item_no, 4, log.c_str() );
 	}
 	g_RevisionList.SetRedraw( true );
-}
-
-std::wstring toWide( const void *str, size_t length )
-{
-	auto w = std::vector<TCHAR>( MultiByteToWideChar( CP_UTF8, 0, LPCSTR( str ), int( length ), nullptr, 0 ) );
-	MultiByteToWideChar( CP_UTF8, 0, LPCSTR( str ), int( length ), w.data(), int( w.size() ) );
-	return std::wstring( w.cbegin(), w.cend() );
-}
-
-std::wstring toWide( const std::string &str )
-{ return toWide( str.c_str(), str.size() ); }
-
-std::wstring SJIStoWide( const void *str, size_t length )
-{
-	auto w = std::vector<TCHAR>( MultiByteToWideChar( CP_ACP, 0, LPCSTR( str ), int( length ), nullptr, 0 ) );
-	MultiByteToWideChar( CP_ACP, 0, LPCSTR( str ), int( length ), w.data(), int( w.size() ) );
-	return std::wstring( w.cbegin(), w.cend() );
-}
-
-std::wstring SearchProp( const svn::prop_data_t &props, const std::string name )
-{
-	auto find = props.find( std::vector< uint8_t >( name.cbegin(), name.cend() ) );
-	if( find == props.end() )
-		return std::wstring();
-	return toWide( ( *find ).second.data(), ( *find ).second.size() );
-}
-
-void SetDetailBinary( const void *data, size_t size )
-{
-	TCHAR ascii[17] = {L'\0'};
-
-	auto binary = std::wstringstream();
-	auto byte_count = 0;
-	auto xchs = L"0123456789ABCDEF";
-	auto src = LPBYTE( data );
-
-	binary << L"                 | " << std::setfill( L'0' ) << std::hex;
-	for( auto i = 0; i < 16; ++i )
-		binary << std::setw( 2 ) << i << L' ';
-	binary << L"| Ascii\r\n";
-	binary << L"-----------------+-------------------------------------------------+-----------------\r\n";
-	for( auto i = decltype( size )( 0 ); i < size; ++i )
-	{
-		if( !byte_count )
-			binary << std::setw( 16 ) << i << L" | ";
-
-		auto byte = src[i];
-		ascii[byte_count] = isprint( byte ) ? static_cast< TCHAR >( byte ) : L'.';
-		binary << xchs[byte >> 4] << xchs[byte & 0xf] << L' ';
-		if( ++byte_count >= 16 )
-		{
-			binary << L"| " << ascii << L"\r\n";
-			byte_count = 0;
-		}
-	}
-
-	SendMessage( g_DetailWindow, WM_SETTEXT, 0, reinterpret_cast< LPARAM >( binary.str().c_str() ) );
-}
-
-void SetDetailText( std::wstring text )
-{
-	auto pos = text.find_first_of( L"\r\n" );
-	while( pos != std::wstring::npos )
-	{
-		if( text[pos] == L'\r' && text[pos + 1] != L'\n' )
-			text.insert( pos + 1, L"\n" );
-		else if( text[pos] == L'\n' )
-			text.insert( pos, L"\r" );
-		pos = text.find_first_of( L"\r\n", pos + 2 );
-	}
-	SendMessage( g_DetailWindow, WM_SETTEXT, 0, reinterpret_cast< LPARAM >( text.c_str() ) );
-}
-
-void SetDetailCharset( HWND hWnd, DetailCharsetType type )
-{
-	auto menu = GetMenu( hWnd );
-	CheckMenuItem( menu, ID_CHARSET_UTF8, type == DetailCharsetType::UTF8 ? MF_CHECKED : MF_UNCHECKED );
-	CheckMenuItem( menu, ID_CHARSET_UNICODE, type == DetailCharsetType::Unicode ? MF_CHECKED : MF_UNCHECKED );
-	CheckMenuItem( menu, ID_CHARSET_SHIFTJIS, type == DetailCharsetType::ShiftJIS ? MF_CHECKED : MF_UNCHECKED );
-	g_DetailCharsetType = type;
-
-	if( !g_DetailText.empty() )
-		switch( type )
-		{
-		case DetailCharsetType::UTF8: SetDetailText( toWide( g_DetailText.data(), g_DetailText.size() ) ); break;
-		case DetailCharsetType::Unicode: SetDetailText( std::wstring( g_DetailText.cbegin(), g_DetailText.cend() ) ); break;
-		case DetailCharsetType::ShiftJIS: SetDetailText( SJIStoWide( g_DetailText.data(), g_DetailText.size() ) ); break;
-		}
-}
-
-void SetDetailTabstop( HWND hWnd, int tabstop )
-{
-	auto menu = GetMenu( hWnd );
-	CheckMenuItem( menu, ID_TABSTOP_2, tabstop == 2 ? MF_CHECKED : MF_UNCHECKED );
-	CheckMenuItem( menu, ID_TABSTOP_4, tabstop == 4 ? MF_CHECKED : MF_UNCHECKED );
-	CheckMenuItem( menu, ID_TABSTOP_8, tabstop == 8 ? MF_CHECKED : MF_UNCHECKED );
-
-	tabstop *= 4;
-	SendMessage( g_DetailWindow, EM_SETTABSTOPS, 1, LPARAM( &tabstop ) );
-	InvalidateRect( g_DetailWindow, nullptr, FALSE );
-}
-
-void SaveToFile( HWND hWnd, const svn::Node *node )
-{
-	namespace fs = std::experimental::filesystem;
-
-	TCHAR fullpath[MAX_PATH];
-	lstrcpy( fullpath, fs::path( node->NodePath ).filename().generic_wstring().c_str() );
-
-	TCHAR initpath[MAX_PATH];
-	lstrcpy( initpath, fs::current_path().native().c_str() );
-
-	auto ofn = OPENFILENAME{0};
-	ofn.lStructSize = sizeof( OPENFILENAME );
-	ofn.hwndOwner = hWnd;
-	ofn.lpstrFilter = L"All files\0*.*\0\0";
-	ofn.lpstrFile = fullpath;
-	ofn.nMaxFile = sizeof( fullpath );
-	ofn.lpstrInitialDir = initpath;
-	ofn.Flags = OFN_OVERWRITEPROMPT;
-	if( !::GetSaveFileName( &ofn ) )
-		return;
-
-	auto out = std::ofstream( fullpath, std::ios_base::binary );
-	if( out )
-		out.write( reinterpret_cast< const char * >( node->text.data() ), node->text.size() );
 }
 
 INT_PTR CALLBACK About( HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam )
