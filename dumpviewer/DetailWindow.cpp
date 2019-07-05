@@ -1,5 +1,5 @@
 #include "DetailWindow.h"
-#include "resource.h"
+#include "dumpviewer.h"
 #include "WICManager.h"
 #include "misc.h"
 #include <iomanip>
@@ -21,12 +21,11 @@ namespace DetailWindow
 		if( !g_WICManager.Create() )
 			return false;
 
-		auto inst = reinterpret_cast< HINSTANCE >( GetWindowLongPtr( hWnd, GWLP_HINSTANCE ) );
-		g_DetailWindow = CreateWindowEx( 0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | ES_LEFT | ES_MULTILINE | ES_READONLY, 0, 0, 0, 0, hWnd, (HMENU )IDC_CONTENTS_DETAIL, inst, 0 );
+		g_DetailWindow = CreateWindowEx( 0, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | ES_LEFT | ES_MULTILINE | ES_READONLY, 0, 0, 0, 0, hWnd, (HMENU )IDC_CONTENTS_DETAIL, hInst, 0 );
 		if( !g_DetailWindow )
 			return false;
 
-		g_BitmapWindow = CreateWindowEx( 0, L"STATIC", L"", WS_CHILD | SS_OWNERDRAW, 0, 0, 0, 0, hWnd, (HMENU )IDC_CONTENTS_BITMAP, inst, 0 );
+		g_BitmapWindow = CreateWindowEx( 0, L"STATIC", L"", WS_CHILD | SS_OWNERDRAW, 0, 0, 0, 0, hWnd, (HMENU )IDC_CONTENTS_BITMAP, hInst, 0 );
 		if( !g_BitmapWindow )
 			return false;
 

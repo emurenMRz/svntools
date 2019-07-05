@@ -9,4 +9,6 @@ namespace RevisionList
 	void Build( svn::Dump &dump );
 	void Resize( RECT rc );
 	void Clear();
+
+	LRESULT OnNotify( HWND hWnd, UINT code, LPARAM lParam );
 }

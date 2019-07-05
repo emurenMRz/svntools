@@ -33,9 +33,9 @@ enum ActiveBorderType
 ATOM MyRegisterClass( HINSTANCE hInstance );
 BOOL InitInstance( HINSTANCE, int );
 LRESULT CALLBACK WndProc( HWND, UINT, WPARAM, LPARAM );
-void OnSize( WORD width, WORD height, double h_border_pos, double v_border_pos );
 int OnCreate( HWND hWnd );
-LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, const LPNMLISTVIEW lv );
+void OnSize( WORD width, WORD height, double h_border_pos, double v_border_pos );
+LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, LPARAM lParam );
 void OnDropFiles( HWND hWnd, HDROP drop );
 INT_PTR CALLBACK About( HWND, UINT, WPARAM, LPARAM );
 
@@ -141,7 +141,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 		return DetailWindow::Draw( LPDRAWITEMSTRUCT( lParam ) );
 
 	case WM_NOTIFY:
-		return OnNotify( hWnd, LPNMHDR( lParam ), LPNMLISTVIEW( lParam ) );
+		return OnNotify( hWnd, LPNMHDR( lParam ), lParam );
 
 	case WM_COMMAND:
 		switch( LOWORD( wParam ) )
@@ -286,73 +286,15 @@ void OnSize( WORD width, WORD height, double h_border_pos, double v_border_pos )
 	DetailWindow::Resize( RECT{separate + BORDER_WIDTH, border + BORDER_WIDTH, width - separate - BORDER_WIDTH, height - border - BORDER_WIDTH} );
 }
 
-LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, const LPNMLISTVIEW lv )
+
+LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, LPARAM lParam )
 {
 	switch( hdr->idFrom )
 	{
 	case IDC_REVISION_LIST:
-		switch( hdr->code )
-		{
-		case LVN_ITEMCHANGED:
-			if( lv->uNewState & LVIS_SELECTED )
-				if( lv->iItem >= 0 )
-					NodeList::Build( g_SVNDump[int( lv->lParam )] );
-			break;
-
-			//case LVN_GETDISPINFO:
-			//	{
-			//		auto lpDispInfo = (NMLVDISPINFO * )lv;
-			//		if( lpDispInfo->item.mask & LVIF_TEXT )
-			//		{
-			//			auto item_no = lpDispInfo->item.iItem;
-			//			auto subitem_no = lpDispInfo->item.iSubItem;
-			//			TCHAR szBuf[256];
-			//			wsprintf( szBuf, TEXT( "%c" ), L's' );
-			//			lstrcpy( lpDispInfo->item.pszText, szBuf );
-			//		}
-			//	}
-			//	break;
-		}
-		break;
-
+		return RevisionList::OnNotify( hWnd, hdr->code, lParam );
 	case IDC_CONTENTS_LIST:
-		switch( hdr->code )
-		{
-		case LVN_ITEMCHANGED:
-			if( lv->uNewState & LVIS_SELECTED )
-				DetailWindow::SetNode( reinterpret_cast< const svn::Node * >( lv->lParam ) );
-			break;
-
-		case NM_DBLCLK:
-			{
-				auto lpia = reinterpret_cast< LPNMITEMACTIVATE >( lv );
-				if( lpia->iItem < 0 )
-					break;
-				const auto node = NodeList::GetNode( lpia->iItem );
-				if( node && node->NodeKind == "file" )
-					SaveToFile( hWnd, node );
-			}
-			break;
-
-		case NM_CUSTOMDRAW:
-			{
-				auto lplvcd = reinterpret_cast< LPNMLVCUSTOMDRAW >( lv );
-				switch( lplvcd->nmcd.dwDrawStage )
-				{
-				case CDDS_PREPAINT:
-					return CDRF_NOTIFYITEMDRAW;
-				case CDDS_ITEMPREPAINT:
-					{
-						const auto c = reinterpret_cast< const svn::Node * >( lplvcd->nmcd.lItemlParam );
-						lplvcd->clrTextBk = c->NodeAction == "add" ? RGB( 0xf8, 0xff, 0xf8 ) : c->NodeAction == "change" ? RGB( 0xf8, 0xf8, 0xff ) : c->NodeAction == "replace" ? RGB( 0xff, 0xf8, 0xf8 ) : 0xffffff;
-						lplvcd->clrText = c->NodeAction == "delete" ? 0x808080 : 0;
-					}
-					return CDRF_DODEFAULT;
-				}
-			}
-			return CDRF_DODEFAULT;
-		}
-		break;
+		return NodeList::OnNotify( hWnd, hdr->code, lParam );
 	}
 	return 0;
 }

@@ -10,5 +10,5 @@ namespace NodeList
 	void Resize( RECT rc );
 	void Clear();
 
-	const svn::Node *GetNode( int item_no );
+	LRESULT OnNotify( HWND hWnd, UINT code, LPARAM lParam );
 }

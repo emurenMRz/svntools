@@ -1,6 +1,7 @@
 #include "RevisionList.h"
-#include "resource.h"
+#include "dumpviewer.h"
 #include "ListView.h"
+#include "NodeList.h"
 #include "misc.h"
 #include <sstream>
 
@@ -67,4 +68,34 @@ namespace RevisionList
 
 	void Clear()
 	{ g_RevisionList.Clear(); }
+
+	LRESULT OnNotify( HWND hWnd, UINT code, LPARAM lParam )
+	{
+		switch( code )
+		{
+		case LVN_ITEMCHANGED:
+			{
+				const auto lv = LPNMLISTVIEW( lParam );
+				if( lv->uNewState & LVIS_SELECTED )
+					if( lv->iItem >= 0 )
+						NodeList::Build( g_SVNDump[int( lv->lParam )] );
+			}
+			break;
+
+			//case LVN_GETDISPINFO:
+			//	{
+			//		auto lpDispInfo = (NMLVDISPINFO * )lv;
+			//		if( lpDispInfo->item.mask & LVIF_TEXT )
+			//		{
+			//			auto item_no = lpDispInfo->item.iItem;
+			//			auto subitem_no = lpDispInfo->item.iSubItem;
+			//			TCHAR szBuf[256];
+			//			wsprintf( szBuf, TEXT( "%c" ), L's' );
+			//			lstrcpy( lpDispInfo->item.pszText, szBuf );
+			//		}
+			//	}
+			//	break;
+		}
+		return LRESULT();
+	}
 }

@@ -1,5 +1,5 @@
 #include "NodeList.h"
-#include "resource.h"
+#include "dumpviewer.h"
 #include "ListView.h"
 #include "misc.h"
 #include "DetailWindow.h"
@@ -85,4 +85,48 @@ namespace NodeList
 
 	const svn::Node *GetNode( int item_no )
 	{ return reinterpret_cast< const svn::Node * >( g_ContentsList.GetItemData( item_no ) ); }
+
+	LRESULT OnNotify( HWND hWnd, UINT code, LPARAM lParam )
+	{
+		switch( code )
+		{
+		case LVN_ITEMCHANGED:
+			{
+				const auto lv = LPNMLISTVIEW( lParam );
+				if( lv->uNewState & LVIS_SELECTED )
+					DetailWindow::SetNode( reinterpret_cast< const svn::Node * >( lv->lParam ) );
+			}
+			break;
+
+		case NM_DBLCLK:
+			{
+				const auto lpia = reinterpret_cast< LPNMITEMACTIVATE >( lParam );
+				if( lpia->iItem < 0 )
+					break;
+				const auto node = GetNode( lpia->iItem );
+				if( node && node->NodeKind == "file" )
+					SaveToFile( hWnd, node );
+			}
+			break;
+
+		case NM_CUSTOMDRAW:
+			{
+				const auto lplvcd = reinterpret_cast< LPNMLVCUSTOMDRAW >( lParam );
+				switch( lplvcd->nmcd.dwDrawStage )
+				{
+				case CDDS_PREPAINT:
+					return CDRF_NOTIFYITEMDRAW;
+				case CDDS_ITEMPREPAINT:
+					{
+						const auto c = reinterpret_cast< const svn::Node * >( lplvcd->nmcd.lItemlParam );
+						lplvcd->clrTextBk = c->NodeAction == "add" ? RGB( 0xf8, 0xff, 0xf8 ) : c->NodeAction == "change" ? RGB( 0xf8, 0xf8, 0xff ) : c->NodeAction == "replace" ? RGB( 0xff, 0xf8, 0xf8 ) : 0xffffff;
+						lplvcd->clrText = c->NodeAction == "delete" ? 0x808080 : 0;
+					}
+					return CDRF_DODEFAULT;
+				}
+			}
+			return CDRF_DODEFAULT;
+		}
+		return 0;
+	}
 }
