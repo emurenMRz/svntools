@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include <vector>
 #include <atlbase.h>
 #include <wincodec.h>
@@ -8,6 +9,7 @@ class WICManager
 {
 public:
 	using buffer_t = std::vector<uint8_t>;
+	using failed_load = std::logic_error;
 
 	bool Create();
 	void Release();

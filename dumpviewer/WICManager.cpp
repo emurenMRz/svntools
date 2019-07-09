@@ -55,6 +55,8 @@ CComPtr<IWICBitmapDecoder> WICManager::CreateDecoderFromMemory( const void *imag
 
 	if( FAILED( hr ) )
 	{
+		if( hr == 0x88982f50 )
+			throw failed_load( "can't create decoder." );
 		std::stringstream ss;
 		ss << "failed CreateDecoderFromMemory: " << hr << std::endl;
 		throw std::runtime_error( ss.str() );
@@ -70,6 +72,8 @@ CComPtr<IWICBitmapDecoder> WICManager::CreateDecoderFromFilename( PCTSTR uri )
 
 	if( FAILED( hr ) )
 	{
+		if( hr == 0x88982f50 )
+			throw failed_load( "can't create decoder." );
 		std::stringstream ss;
 		ss << "failed CreateDecoderFromFilename: " << hr << std::endl;
 		throw std::runtime_error( ss.str() );

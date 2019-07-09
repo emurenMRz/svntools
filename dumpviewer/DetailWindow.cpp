@@ -98,7 +98,7 @@ namespace DetailWindow
 
 	void SetNode( const svn::Node *node )
 	{
-		if( node->text.empty() || node->NodeKind != "file" )
+		if( !node->text_size || node->NodeKind != "file" )
 		{
 			Clear();
 			return;
@@ -106,32 +106,43 @@ namespace DetailWindow
 
 		try
 		{
-			g_ImageBuffer = g_WICManager.Load( node->text.data(), node->text.size() );
-			ShowWindow( g_DetailWindow, SW_HIDE );
-			ShowWindow( g_BitmapWindow, SW_SHOWNORMAL );
-			InvalidateRect( g_BitmapWindow, NULL, TRUE );
-		}
-		catch( const std::exception & )
-		{
-			g_TextBuffer.clear();
-			auto mime_type = SearchProp( node->prop, "svn:mime-type" );
-			if( mime_type.empty() )
-			{
-				g_TextBuffer = node->text;
-				switch( g_CharsetType )
+			g_TextBuffer = node->get_text_content();
+
+			if( node->TextDelta )
+				if( !memcmp( g_TextBuffer.data(), "SVN", 3 ) )
 				{
-				case CharsetType::UTF8: SetTextData( toWide( node->text.data(), node->text.size() ) ); break;
-				case CharsetType::Unicode: SetTextData( std::wstring( node->text.cbegin(), node->text.cend() ) ); break;
-				case CharsetType::ShiftJIS: SetTextData( SJIStoWide( node->text.data(), node->text.size() ) ); break;
+					//delta content: noimpl...
 				}
+
+			try
+			{
+				g_ImageBuffer = g_WICManager.Load( g_TextBuffer.data(), g_TextBuffer.size() );
+				ShowWindow( g_DetailWindow, SW_HIDE );
+				ShowWindow( g_BitmapWindow, SW_SHOWNORMAL );
+				InvalidateRect( g_BitmapWindow, NULL, TRUE );
 			}
-			else if( mime_type == L"application/octet-stream" )
-				SetBinaryData( node->text.data(), node->text.size() );
-			else
-				SetTextData( L"" );
-			ShowWindow( g_DetailWindow, SW_SHOWNORMAL );
-			ShowWindow( g_BitmapWindow, SW_HIDE );
+			catch( const WICManager::failed_load & )
+			{
+				auto mime_type = SearchProp( node->prop, "svn:mime-type" );
+				if( mime_type.empty() )
+				{
+					switch( g_CharsetType )
+					{
+					case CharsetType::UTF8: SetTextData( toWide( g_TextBuffer.data(), g_TextBuffer.size() ) ); break;
+					case CharsetType::Unicode: SetTextData( std::wstring( g_TextBuffer.cbegin(), g_TextBuffer.cend() ) ); break;
+					case CharsetType::ShiftJIS: SetTextData( SJIStoWide( g_TextBuffer.data(), g_TextBuffer.size() ) ); break;
+					}
+				}
+				else if( mime_type == L"application/octet-stream" )
+					SetBinaryData( g_TextBuffer.data(), g_TextBuffer.size() );
+				else
+					SetTextData( L"" );
+				ShowWindow( g_DetailWindow, SW_SHOWNORMAL );
+				ShowWindow( g_BitmapWindow, SW_HIDE );
+			}
 		}
+		catch( const std::exception &e )
+		{ MessageBoxA( NULL, e.what(), NULL, MB_OK ); }
 	}
 
 	void SetBinaryData( const void *data, size_t size )

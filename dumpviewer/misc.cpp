@@ -20,7 +20,7 @@ std::wstring SJIStoWide( const void *str, size_t length )
 
 std::wstring SearchProp( const svn::prop_data_t &props, const std::string name )
 {
-	auto find = props.find( std::vector< uint8_t >( name.cbegin(), name.cend() ) );
+	auto find = props.find( name );
 	if( find == props.end() )
 		return std::wstring();
 	return toWide( ( *find ).second.data(), ( *find ).second.size() );
@@ -49,5 +49,8 @@ void SaveToFile( HWND hWnd, const svn::Node *node )
 
 	auto out = std::ofstream( fullpath, std::ios_base::binary );
 	if( out )
-		out.write( reinterpret_cast< const char * >( node->text.data() ), node->text.size() );
+	{
+		const auto content = node->get_text_content();
+		out.write( reinterpret_cast< const char * >( content.data() ), content.size() );
+	}
 }
