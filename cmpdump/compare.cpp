@@ -1,37 +1,26 @@
 #include "SVNDump.h"
 #include <iostream>
-#include <fstream>
-#include <string>
-#include <vector>
 
-using std::cout;
-using std::cerr;
-using std::endl;
+using namespace std;
 
-int main( int argc, char *argv[] )
+bool dump_compare( const char *dump1_path, const char *dump2_path )
 {
-	if( argc != 3 )
-	{
-		cout << "<USAGE> cmpdump repos1.dump repos2.dump" << endl;
-		return 1;
-	}
-
 	try
 	{
-		auto dmp1 = svn::Dump( argv[1] );
+		auto dmp1 = svn::Dump( dump1_path );
 		if( !dmp1 )
-			return 1;
-		cout << argv[1] << ": max revision number: " << dmp1.GetMaxRevision() << ", format version: " << dmp1.GetFormatVersion() << endl;
+			return false;
+		cout << dump1_path << ": max revision number: " << dmp1.GetMaxRevision() << ", format version: " << dmp1.GetFormatVersion() << endl;
 
-		auto dmp2 = svn::Dump( argv[2] );
+		auto dmp2 = svn::Dump( dump2_path );
 		if( !dmp2 )
-			return 1;
-		cout << argv[2] << ": max revision number: " << dmp2.GetMaxRevision() << ", format version: " << dmp2.GetFormatVersion() << endl;
+			return false;
+		cout << dump2_path << ": max revision number: " << dmp2.GetMaxRevision() << ", format version: " << dmp2.GetFormatVersion() << endl;
 
 		if( dmp1 != dmp2 )
 		{
 			cerr << "different UUID: " << dmp1.UUID() << " != " << dmp2.UUID() << endl;
-			return 1;
+			return false;
 		}
 
 		for( int i = 0; ; ++i )
@@ -84,6 +73,5 @@ int main( int argc, char *argv[] )
 	}
 
 	cout << "complete." << endl;
-
-	return 0;
+	return true;
 }

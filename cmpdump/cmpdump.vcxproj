@@ -151,7 +151,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\_commonfiles\SVNDump.cpp" />
-    <ClCompile Include="cmpdump.cpp" />
+    <ClCompile Include="checkout.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="compare.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\_commonfiles\SVNDump.h" />
