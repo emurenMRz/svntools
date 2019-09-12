@@ -286,7 +286,6 @@ void OnSize( WORD width, WORD height, double h_border_pos, double v_border_pos )
 	DetailWindow::Resize( RECT{separate + BORDER_WIDTH, border + BORDER_WIDTH, width - separate - BORDER_WIDTH, height - border - BORDER_WIDTH} );
 }
 
-
 LRESULT OnNotify( HWND hWnd, const LPNMHDR hdr, LPARAM lParam )
 {
 	switch( hdr->idFrom )

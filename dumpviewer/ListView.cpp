@@ -15,11 +15,11 @@ bool ListView::Create( HWND parent, int id, bool is_owner_data ) noexcept
 	if( !inst )
 		return false;
 
-	auto style = WS_CHILD | WS_VISIBLE | WS_EX_CONTROLPARENT | LVS_REPORT | LVS_SHOWSELALWAYS;
+	auto style = WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SHOWSELALWAYS;
 	if( is_owner_data )
 		style |= LVS_OWNERDATA;
 
-	m_List = CreateWindowEx( 0, WC_LISTVIEW, L"", style, 0, 0, 0, 0, parent, reinterpret_cast< HMENU >( static_cast< int64_t >( id ) ), inst, NULL );
+	m_List = CreateWindowEx( WS_EX_CONTROLPARENT, WC_LISTVIEW, L"", style, 0, 0, 0, 0, parent, reinterpret_cast< HMENU >( static_cast< int64_t >( id ) ), inst, NULL );
 	if( !m_List )
 		return false;
 

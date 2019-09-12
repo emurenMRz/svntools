@@ -104,15 +104,44 @@ namespace DetailWindow
 			return;
 		}
 
+		auto get_offset = []( const uint8_t *data, int &offset )
+		{
+			auto value = 0;
+			for( ; ; ++offset )
+			{
+				value <<= 8;
+				value |= data[offset];
+				if( !( data[offset] & 0x80 ) )
+					break;
+			}
+			++offset;
+			return value;
+		};
+
 		try
 		{
 			g_TextBuffer = node->get_text_content();
 
 			if( node->TextDelta )
-				if( !memcmp( g_TextBuffer.data(), "SVN", 3 ) )
+			{
+				auto data = g_TextBuffer.data();
+				if( !memcmp( data, "SVN\0", 4 ) )
 				{
-					//delta content: noimpl...
+					auto str = std::string( "no implementation: --deltas option\r\n" );
+					g_TextBuffer.insert( g_TextBuffer.begin(), str.begin(), str.end() );
+				#if 0
+					//data[4]: unknown
+					auto offset = 5;
+					auto begin_addr = get_offset( data, offset );
+					auto end_addr = get_offset( data, offset );
+					auto foo_length = data[offset];
+					++offset;
+					auto replace_length = data[offset];
+					offset += foo_length;
+					g_TextBuffer.erase( g_TextBuffer.begin(), g_TextBuffer.begin() + offset );
+				#endif
 				}
+			}
 
 			try
 			{

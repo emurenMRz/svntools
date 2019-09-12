@@ -10,6 +10,7 @@ namespace RevisionList
 {
 	ListView g_RevisionList;
 	std::vector<std::string> g_ActionsList;
+	std::vector<int> g_ReviisonNumbers;
 
 	bool Create( HWND hWnd )
 	{
@@ -19,7 +20,7 @@ namespace RevisionList
 		g_RevisionList.AddColumn( TEXT( "Revision" ), 80 );
 		g_RevisionList.AddColumn( TEXT( "Actions" ), 160 );
 		g_RevisionList.AddColumn( TEXT( "Author" ), 100 );
-		g_RevisionList.AddColumn( TEXT( "Date(GMT)" ), 150 );
+		g_RevisionList.AddColumn( TEXT( "Date(UTC)" ), 150 );
 		g_RevisionList.AddColumn( TEXT( "Message" ), 1000 );
 		return true;
 	}
@@ -30,6 +31,10 @@ namespace RevisionList
 		g_RevisionList.SetItemCount( int( size ) );
 		g_ActionsList.clear();
 		g_ActionsList.resize( size );
+		g_ReviisonNumbers.clear();
+		if( !dump[0] || dump.GetRevisionCount() - 1 != dump.GetMaxRevision() )
+			for( auto &r : dump )
+				g_ReviisonNumbers.push_back( r.number );
 	}
 
 	void Resize( RECT rc )
@@ -47,7 +52,9 @@ namespace RevisionList
 				const auto di = reinterpret_cast< NMLVDISPINFO * >( lParam );
 				if( di->item.mask & LVIF_TEXT )
 				{
-					const auto &r = g_SVNDump[di->item.iItem];
+					const auto &r = g_SVNDump[g_ReviisonNumbers.empty() ? di->item.iItem : g_ReviisonNumbers[di->item.iItem]];
+					if( !r )
+						break;
 					switch( di->item.iSubItem )
 					{
 					case 0: //Revision
@@ -78,12 +85,17 @@ namespace RevisionList
 					case 2: //Author
 						StringCchPrintf( di->item.pszText, di->item.cchTextMax, L"%s", SearchProp( r.prop, "svn:author" ).c_str() );
 						break;
-					case 3: //Date(GMT)
+					case 3: //Date(UTC)
 						{
 							auto date = SearchProp( r.prop, "svn:date" );
-							date.replace( date.find_first_of( L'T' ), 1, L" " );
-							date.erase( date.find_last_of( L'.' ) );
-							StringCchPrintf( di->item.pszText, di->item.cchTextMax, L"%s", date.c_str() );
+							if( date.empty() )
+								StringCchPrintf( di->item.pszText, di->item.cchTextMax, L"<no date>" );
+							else
+							{
+								date.replace( date.find_first_of( L'T' ), 1, L" " );
+								date.erase( date.find_last_of( L'.' ) );
+								StringCchPrintf( di->item.pszText, di->item.cchTextMax, L"%s", date.c_str() );
+							}
 						}
 						break;
 					case 4: //Message
@@ -99,7 +111,7 @@ namespace RevisionList
 				const auto lv = LPNMLISTVIEW( lParam );
 				if( lv->uNewState & LVIS_SELECTED )
 					if( lv->iItem >= 0 )
-						NodeList::Build( g_SVNDump[lv->iItem] );
+						NodeList::Build( g_SVNDump[g_ReviisonNumbers.empty() ? lv->iItem : g_ReviisonNumbers[lv->iItem]] );
 			}
 			break;
 		}
