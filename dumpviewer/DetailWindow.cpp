@@ -436,7 +436,11 @@ namespace DetailWindow
 				break;
 			}
 			g_TextBuffer.emplace_back( replace_tab( text.substr( pos, line_end - pos ) ) );
-			pos = text.find_first_not_of( L"\r\n", line_end );
+			if( text[line_end] == L'\r' )
+				++line_end;
+			if( text[line_end] == L'\n' )
+				++line_end;
+			pos = line_end;
 		}
 
 		Update( DisplayMode::Text, fixed_display_pos );
