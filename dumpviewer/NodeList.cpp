@@ -105,7 +105,10 @@ namespace NodeList
 					break;
 				const auto node = GetNode( lpia->iItem );
 				if( node && node->NodeKind == "file" )
-					SaveToFile( hWnd, node );
+					if( node->TextDelta )
+						MessageBox( hWnd, TEXT( "--deltasオプションを使用したdumpファイルのコンテンツ出力には対応していません" ), NULL, MB_OK );
+					else
+						SaveToFile( hWnd, node );
 			}
 			break;
 

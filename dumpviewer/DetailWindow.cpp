@@ -120,6 +120,21 @@ namespace DetailWindow
 	{
 		switch( message )
 		{
+		case WM_CREATE:
+			{
+				if( !g_WICManager.Create() )
+					return -1;
+
+				auto logfont = LOGFONT{-MulDiv( 9, GetDpiForWindow( hWnd ), 72 )};
+				logfont.lfQuality = CLEARTYPE_NATURAL_QUALITY;
+				logfont.lfPitchAndFamily = FIXED_PITCH;
+				lstrcpy( logfont.lfFaceName, TEXT( "MS Gothic" ) );
+				g_DetailFont = CreateFontIndirect( &logfont );
+
+				g_DisplayMode = DisplayMode::Text;
+			}
+			return 0;
+
 		case WM_DESTROY:
 			DeleteObject( g_DetailFont );
 			g_WICManager.Release();
@@ -131,11 +146,11 @@ namespace DetailWindow
 				GetWindowRect( hWnd, &rc );
 				auto w = rc.right - rc.left;
 				auto h = rc.bottom - rc.top;
-				auto tm = TEXTMETRIC{};
 				auto dc = GetDC( hWnd );
 				if( dc )
 				{
 					auto font = SelectObject( dc, g_DetailFont );
+					auto tm = TEXTMETRIC{};
 					if( GetTextMetrics( dc, &tm ) )
 					{
 						g_TextHeight = tm.tmHeight;
@@ -230,9 +245,6 @@ namespace DetailWindow
 		if( g_DetailWindow )
 			return false;
 
-		if( !g_WICManager.Create() )
-			return false;
-
 		auto CLASS_NAME = TEXT( "DetailWindowClass" );
 		auto wcex = WNDCLASSEX{sizeof( WNDCLASSEX )};
 		if( !GetClassInfoEx( hInst, CLASS_NAME, &wcex ) )
@@ -247,21 +259,11 @@ namespace DetailWindow
 				return false;
 		}
 
-		g_DetailWindow = CreateWindowEx( 0, CLASS_NAME, L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL, 0, 0, 0, 0, hWnd, reinterpret_cast< HMENU >( IDC_CONTENTS_DETAIL ), hInst, 0 );
-		if( !g_DetailWindow )
-			return false;
-
-		auto logfont = LOGFONT{-MulDiv( 9, GetDpiForWindow( hWnd ), 72 )};
-		logfont.lfQuality = CLEARTYPE_NATURAL_QUALITY;
-		logfont.lfPitchAndFamily = FIXED_PITCH;
-		lstrcpy( logfont.lfFaceName, TEXT( "MS Gothic" ) );
-		g_DetailFont = CreateFontIndirect( &logfont );
-
-		g_DisplayMode = DisplayMode::Text;
-
 		SetCharset( hWnd, CharsetType::UTF8 );
 		SetTabstop( hWnd, 4 );
-		return true;
+
+		g_DetailWindow = CreateWindowEx( 0, CLASS_NAME, L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL, 0, 0, 0, 0, hWnd, reinterpret_cast< HMENU >( IDC_CONTENTS_DETAIL ), hInst, 0 );
+		return g_DetailWindow != NULL;
 	}
 
 	void Resize( RECT rc )
@@ -346,7 +348,7 @@ namespace DetailWindow
 			{
 				g_ImageBuffer = g_WICManager.Load( g_ContentBuffer.data(), g_ContentBuffer.size() );
 				Update( DisplayMode::Image );
-			}
+				}
 			catch( const WICManager::failed_load & )
 			{
 				auto mime_type = SearchProp( node->prop, "svn:mime-type" );
@@ -364,10 +366,10 @@ namespace DetailWindow
 				else
 					SetTextData( L"" );
 			}
-		}
+			}
 		catch( const std::exception &e )
 		{ MessageBoxA( nullptr, e.what(), nullptr, MB_OK ); }
-	}
+		}
 
 	void SetBinaryData( const void *data, size_t size )
 	{
@@ -488,4 +490,4 @@ namespace DetailWindow
 			case CharsetType::ShiftJIS: SetTextData( SJIStoWide( g_ContentBuffer.data(), g_ContentBuffer.size() ), true ); break;
 			}
 	}
-}
+	}
