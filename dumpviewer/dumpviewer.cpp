@@ -8,6 +8,7 @@
 #include "misc.h"
 #include <sstream>
 #include <map>
+#include <windowsx.h>
 #include <objbase.h>
 #include <shellapi.h>
 #include <commctrl.h>
@@ -127,7 +128,6 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 		return OnCreate( hWnd );
 
 	case WM_DESTROY:
-		DetailWindow::Destroy();
 		PostQuitMessage( 0 );
 		break;
 
@@ -143,6 +143,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 		break;
 
 	case WM_SETCURSOR:
+		if( !DefWindowProc( hWnd, message, wParam, lParam ) )
 		{
 			auto pt = POINT{};
 			GetCursorPos( &pt );
@@ -154,11 +155,13 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 				default_cursor = SetCursor( ns_cursor );
 			else if( pt.y >= bar_y && pt.x >= bar_x - BORDER_HIT_WIDTH && pt.x <= bar_x + BORDER_HIT_WIDTH )
 				default_cursor = SetCursor( we_cursor );
+			else
+			{
+				default_cursor = 0;
+				return FALSE;
+			}
 		}
-		break;
-
-	case WM_DRAWITEM:
-		return DetailWindow::Draw( LPDRAWITEMSTRUCT( lParam ) );
+		return TRUE;
 
 	case WM_NOTIFY:
 		return OnNotify( hWnd, LPNMHDR( lParam ), lParam );
@@ -187,8 +190,8 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 	case WM_MOUSEMOVE:
 		if( active_border_type != ActiveBorderType::None )
 		{
-			auto x = LOWORD( lParam );
-			auto y = HIWORD( lParam );
+			auto x = GET_X_LPARAM( lParam );
+			auto y = GET_Y_LPARAM( lParam );
 
 			if( x < BORDER_LIMIT || x >= window_width - BORDER_LIMIT || y < BORDER_LIMIT || y >= window_height - BORDER_LIMIT )
 				break;
@@ -220,8 +223,8 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 	case WM_LBUTTONDOWN:
 		if( default_cursor )
 		{
-			auto x = LOWORD( lParam );
-			auto y = HIWORD( lParam );
+			auto x = GET_X_LPARAM( lParam );
+			auto y = GET_Y_LPARAM( lParam );
 			auto bar_x = int( window_width * v_border_pos );
 			auto bar_y = int( window_height * h_border_pos );
 			if( y >= bar_y - BORDER_HIT_WIDTH && y <= bar_y + BORDER_HIT_WIDTH )
@@ -245,8 +248,8 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 	case WM_LBUTTONUP:
 		if( active_border_type != ActiveBorderType::None )
 		{
-			auto x = min( max( LOWORD( lParam ), BORDER_LIMIT ), window_width - BORDER_LIMIT );
-			auto y = min( max( HIWORD( lParam ), BORDER_LIMIT ), window_height - BORDER_LIMIT );
+			auto x = min( max( GET_X_LPARAM( lParam ), BORDER_LIMIT ), window_width - BORDER_LIMIT );
+			auto y = min( max( GET_Y_LPARAM( lParam ), BORDER_LIMIT ), window_height - BORDER_LIMIT );
 
 			switch( active_border_type )
 			{

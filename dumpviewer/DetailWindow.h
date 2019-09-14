@@ -10,8 +10,6 @@ namespace DetailWindow
 	{ UTF8, Unicode, ShiftJIS };
 
 	bool Create( HWND hWnd );
-	void Destroy();
-	bool Draw( const LPDRAWITEMSTRUCT dis );
 	void Resize( RECT rc );
 	void Clear();
 
