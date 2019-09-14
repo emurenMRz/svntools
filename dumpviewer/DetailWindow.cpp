@@ -29,7 +29,11 @@ namespace DetailWindow
 		if( !g_BitmapWindow )
 			return false;
 
-		g_DetailFont = CreateFont( 16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_TT_ONLY_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_NATURAL_QUALITY, FIXED_PITCH, L"Terminal" );
+		auto logfont = LOGFONT{-MulDiv( 9, GetDpiForWindow( hWnd ), 72 )};
+		logfont.lfQuality = CLEARTYPE_NATURAL_QUALITY;
+		logfont.lfPitchAndFamily = FIXED_PITCH;
+		lstrcpy( logfont.lfFaceName, TEXT( "MS Gothic" ) );
+		g_DetailFont = CreateFontIndirect( &logfont );
 		if( g_DetailFont )
 			SendMessage( g_DetailWindow, WM_SETFONT, (WPARAM )g_DetailFont, MAKELPARAM( TRUE, 0 ) );
 
@@ -140,8 +144,8 @@ namespace DetailWindow
 					offset += foo_length;
 					g_TextBuffer.erase( g_TextBuffer.begin(), g_TextBuffer.begin() + offset );
 				#endif
-				}
-			}
+		}
+	}
 
 			try
 			{
@@ -169,7 +173,7 @@ namespace DetailWindow
 				ShowWindow( g_DetailWindow, SW_SHOWNORMAL );
 				ShowWindow( g_BitmapWindow, SW_HIDE );
 			}
-		}
+}
 		catch( const std::exception &e )
 		{ MessageBoxA( NULL, e.what(), NULL, MB_OK ); }
 	}
@@ -223,9 +227,7 @@ namespace DetailWindow
 	void SetCharset( HWND hWnd, CharsetType type )
 	{
 		auto menu = GetMenu( hWnd );
-		CheckMenuItem( menu, ID_CHARSET_UTF8, type == CharsetType::UTF8 ? MF_CHECKED : MF_UNCHECKED );
-		CheckMenuItem( menu, ID_CHARSET_UNICODE, type == CharsetType::Unicode ? MF_CHECKED : MF_UNCHECKED );
-		CheckMenuItem( menu, ID_CHARSET_SHIFTJIS, type == CharsetType::ShiftJIS ? MF_CHECKED : MF_UNCHECKED );
+		CheckMenuRadioItem( menu, ID_CHARSET_UTF8, ID_CHARSET_SHIFTJIS, ID_CHARSET_UTF8 + type, MF_BYCOMMAND );
 		g_CharsetType = type;
 
 		if( !g_TextBuffer.empty() )
@@ -239,10 +241,13 @@ namespace DetailWindow
 
 	void SetTabstop( HWND hWnd, int tabstop )
 	{
+		auto bit = -1;
+		for( auto i = 1; bit < 0; ++i )
+			if( tabstop == 0x1 << i )
+				bit = i - 1;
+
 		auto menu = GetMenu( hWnd );
-		CheckMenuItem( menu, ID_TABSTOP_2, tabstop == 2 ? MF_CHECKED : MF_UNCHECKED );
-		CheckMenuItem( menu, ID_TABSTOP_4, tabstop == 4 ? MF_CHECKED : MF_UNCHECKED );
-		CheckMenuItem( menu, ID_TABSTOP_8, tabstop == 8 ? MF_CHECKED : MF_UNCHECKED );
+		CheckMenuRadioItem( menu, ID_TABSTOP_2, ID_TABSTOP_8, ID_TABSTOP_2 + bit, MF_BYCOMMAND );
 
 		tabstop *= 4;
 		SendMessage( g_DetailWindow, EM_SETTABSTOPS, 1, LPARAM( &tabstop ) );
