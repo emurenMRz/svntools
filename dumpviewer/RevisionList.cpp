@@ -88,14 +88,12 @@ namespace RevisionList
 					case 3: //Date(UTC)
 						{
 							auto date = SearchProp( r.prop, "svn:date" );
-							if( date.empty() )
-								StringCchPrintf( di->item.pszText, di->item.cchTextMax, L"<no date>" );
-							else
+							if( !date.empty() )
 							{
 								date.replace( date.find_first_of( L'T' ), 1, L" " );
 								date.erase( date.find_last_of( L'.' ) );
-								StringCchPrintf( di->item.pszText, di->item.cchTextMax, L"%s", date.c_str() );
 							}
+							StringCchPrintf( di->item.pszText, di->item.cchTextMax, L"%s", date.c_str() );
 						}
 						break;
 					case 4: //Message

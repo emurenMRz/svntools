@@ -85,7 +85,7 @@ ATOM MyRegisterClass( HINSTANCE hInstance )
 	wcex.hInstance = hInstance;
 	wcex.hIcon = wcex.hIconSm = LoadIcon( hInstance, MAKEINTRESOURCE( IDI_DUMPVIEWER ) );
 	wcex.hCursor = LoadCursor( nullptr, IDC_ARROW );
-	wcex.hbrBackground = HBRUSH( GetStockObject( GRAY_BRUSH ) );
+	wcex.hbrBackground = HBRUSH( GetStockObject( LTGRAY_BRUSH ) );
 	wcex.lpszMenuName = MAKEINTRESOURCEW( IDC_DUMPVIEWER );
 	wcex.lpszClassName = szWindowClass;
 
@@ -137,6 +137,26 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 		OnSize( window_width, window_height, h_border_pos, v_border_pos );
 		break;
 
+	case WM_KILLFOCUS:
+		default_cursor = 0;
+		active_border_type = ActiveBorderType::None;
+		break;
+
+	case WM_SETCURSOR:
+		{
+			auto pt = POINT{};
+			GetCursorPos( &pt );
+			ScreenToClient( hWnd, &pt );
+
+			auto bar_x = int( window_width * v_border_pos );
+			auto bar_y = int( window_height * h_border_pos );
+			if( pt.y >= bar_y - BORDER_HIT_WIDTH && pt.y <= bar_y + BORDER_HIT_WIDTH )
+				default_cursor = SetCursor( ns_cursor );
+			else if( pt.y >= bar_y && pt.x >= bar_x - BORDER_HIT_WIDTH && pt.x <= bar_x + BORDER_HIT_WIDTH )
+				default_cursor = SetCursor( we_cursor );
+		}
+		break;
+
 	case WM_DRAWITEM:
 		return DetailWindow::Draw( LPDRAWITEMSTRUCT( lParam ) );
 
@@ -165,23 +185,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 		break;
 
 	case WM_MOUSEMOVE:
-		if( active_border_type == ActiveBorderType::None )
-		{
-			auto x = LOWORD( lParam );
-			auto y = HIWORD( lParam );
-			auto bar_x = int( window_width * v_border_pos );
-			auto bar_y = int( window_height * h_border_pos );
-			if( y >= bar_y - BORDER_HIT_WIDTH && y <= bar_y + BORDER_HIT_WIDTH )
-				default_cursor = SetCursor( ns_cursor );
-			else if( y >= bar_y && x >= bar_x - BORDER_HIT_WIDTH && x <= bar_x + BORDER_HIT_WIDTH )
-				default_cursor = SetCursor( we_cursor );
-			else if( default_cursor )
-			{
-				SetCursor( default_cursor );
-				default_cursor = 0;
-			}
-		}
-		else
+		if( active_border_type != ActiveBorderType::None )
 		{
 			auto x = LOWORD( lParam );
 			auto y = HIWORD( lParam );
@@ -252,6 +256,7 @@ LRESULT CALLBACK WndProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam 
 			SetWindowLongPtr( hWnd, GWL_STYLE, GetWindowLongPtr( hWnd, GWL_STYLE ) | WS_CLIPCHILDREN );
 			OnSize( window_width, window_height, h_border_pos, v_border_pos );
 			InvalidateRect( hWnd, nullptr, TRUE );
+			default_cursor = 0;
 			active_border_type = ActiveBorderType::None;
 			ReleaseCapture();
 		}

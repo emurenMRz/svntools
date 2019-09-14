@@ -41,10 +41,6 @@ IDI_DUMPVIEWER          ICON                    "icon.ico"
 
 IDC_DUMPVIEWER MENU
 BEGIN
-    POPUP "ファイル(&F)"
-    BEGIN
-        MENUITEM "終了する(&X)",                    IDM_EXIT
-    END
     POPUP "文字コード(&A)"
     BEGIN
         MENUITEM "UTF-8(&8)",                   ID_CHARSET_UTF8
