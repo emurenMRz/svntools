@@ -328,8 +328,6 @@ namespace DetailWindow
 						return value;
 					};
 
-					auto str = std::string( "no implementation: --deltas option\r\n" );
-					g_ContentBuffer.insert( g_ContentBuffer.begin(), str.begin(), str.end() );
 				#if 0
 					//data[4]: unknown
 					auto offset = 5;
@@ -373,10 +371,7 @@ namespace DetailWindow
 
 	void SetBinaryData( const void *data, size_t size )
 	{
-		TCHAR ascii[17] = {L'\0'};
-
 		auto binary = std::wstringstream();
-		auto byte_count = 0;
 		auto xchs = L"0123456789ABCDEF";
 		auto src = LPBYTE( data );
 
@@ -388,20 +383,30 @@ namespace DetailWindow
 		binary << L"| Ascii";
 		g_TextBuffer.emplace_back( binary.str() );
 		g_TextBuffer.push_back( L"-----------------+-------------------------------------------------+-----------------" );
-		for( auto i = decltype( size )( 0 ); i < size; ++i )
-		{
-			auto binary = std::wstringstream();
-			if( !byte_count )
-				binary << std::setw( 16 ) << i << L" | ";
 
-			auto byte = src[i];
-			ascii[byte_count] = isprint( byte ) ? static_cast< TCHAR >( byte ) : L'.';
-			binary << xchs[byte >> 4] << xchs[byte & 0xf] << L' ';
-			if( ++byte_count >= 16 )
+		for( auto i = decltype( size )( 0 ); i < size; i += 16 )
+		{
+			TCHAR ascii[17] = {L'\0'};
+
+			binary.str( L"" );
+			binary.clear( std::ios_base::goodbit );
+			binary << std::setw( 16 ) << i << L" | ";
+
+			for( auto j = 0; j < 16; ++j )
 			{
-				binary << L"| " << ascii;
-				byte_count = 0;
+				if( i + j >= size )
+				{
+					ascii[j] = L'\0';
+					for( ; j < 16; ++j )
+						binary << L"   ";
+					break;
+				}
+				auto byte = src[i + j];
+				ascii[j] = isprint( byte ) ? static_cast< TCHAR >( byte ) : L'.';
+				binary << xchs[byte >> 4] << xchs[byte & 0xf] << L' ';
 			}
+
+			binary << L"| " << ascii;
 			g_TextBuffer.emplace_back( binary.str() );
 		}
 
