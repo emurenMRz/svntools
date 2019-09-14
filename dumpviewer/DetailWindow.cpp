@@ -7,6 +7,10 @@
 
 namespace DetailWindow
 {
+	enum class DisplayMode
+	{ Text, Binary, Image };
+	DisplayMode g_DisplayMode;
+
 	HWND g_DetailWindow;
 	HFONT g_DetailFont;
 
@@ -15,8 +19,7 @@ namespace DetailWindow
 	WICManager::buffer_t g_ImageBuffer;
 	std::vector<std::wstring> g_TextBuffer;
 	svn::text_data_t g_ContentBuffer;
-	bool g_ImageMode;
-	auto g_DTP = DRAWTEXTPARAMS{sizeof( DRAWTEXTPARAMS )};
+	int g_Tabstop;
 	int g_TextHeight;
 	int g_ColumnPerPage;
 	int g_LinePerPage;
@@ -153,7 +156,7 @@ namespace DetailWindow
 				auto rc = RECT{};
 				GetClientRect( hWnd, &rc );
 
-				if( g_ImageMode )
+				if( g_DisplayMode == DisplayMode::Image )
 				{
 					auto info = LPBITMAPINFOHEADER( g_ImageBuffer.data() );
 					auto bits = g_ImageBuffer.data() + sizeof( BITMAPINFOHEADER );
@@ -188,8 +191,7 @@ namespace DetailWindow
 				{
 					auto dc_store = SaveDC( dc );
 					SelectObject( dc, g_DetailFont );
-					auto tm = TEXTMETRIC{};
-					GetTextMetrics( dc, &tm );
+					SetBkMode( dc, TRANSPARENT );
 					auto sih = SCROLLINFO{sizeof( SCROLLINFO ), SIF_POS};
 					auto siv = SCROLLINFO{sizeof( SCROLLINFO ), SIF_POS};
 					GetScrollInfo( hWnd, SB_HORZ, &sih );
@@ -197,17 +199,13 @@ namespace DetailWindow
 					rc.bottom = g_TextHeight;
 					for( auto l = 0; l < g_LinePerPage; ++l )
 					{
-						rc.left = 0;
 						FillRect( dc, &rc, HBRUSH( GetStockObject( WHITE_BRUSH ) ) );
 						auto line_no = siv.nPos + l;
 						if( line_no < g_TextBuffer.size() )
 						{
 							auto line = g_TextBuffer[line_no];
 							if( sih.nPos < line.length() )
-							{
-								rc.left = -( tm.tmAveCharWidth * sih.nPos );
-								DrawTextEx( dc, const_cast< LPWSTR >( line.c_str() ), -1, &rc, DT_EXPANDTABS | DT_TABSTOP, &g_DTP );
-							}
+								TextOut( dc, 0, rc.top, line.c_str() + sih.nPos, int( line.length() ) - sih.nPos );
 						}
 						rc.top += g_TextHeight;
 						rc.bottom = rc.top + g_TextHeight;
@@ -259,7 +257,7 @@ namespace DetailWindow
 		lstrcpy( logfont.lfFaceName, TEXT( "MS Gothic" ) );
 		g_DetailFont = CreateFontIndirect( &logfont );
 
-		g_ImageMode = false;
+		g_DisplayMode = DisplayMode::Text;
 
 		SetCharset( hWnd, CharsetType::UTF8 );
 		SetTabstop( hWnd, 4 );
@@ -272,12 +270,15 @@ namespace DetailWindow
 	void Clear()
 	{ SetTextData( L"" ); }
 
-	void Update( bool image_mode )
+	void Update( DisplayMode display_mode, bool fixed_display_pos = false )
 	{
-		g_ImageMode = image_mode;
-		auto sih = SCROLLINFO{sizeof( SCROLLINFO ), SIF_ALL};
-		auto siv = SCROLLINFO{sizeof( SCROLLINFO ), SIF_ALL};
-		if( !image_mode )
+		g_DisplayMode = display_mode;
+		auto flags = UINT( SIF_ALL );
+		if( fixed_display_pos )
+			flags &= ~SIF_POS;
+		auto sih = SCROLLINFO{sizeof( SCROLLINFO ), flags};
+		auto siv = SCROLLINFO{sizeof( SCROLLINFO ), flags};
+		if( display_mode != DisplayMode::Image )
 		{
 			auto max_length = 0;
 			for( auto l : g_TextBuffer )
@@ -304,20 +305,6 @@ namespace DetailWindow
 			return;
 		}
 
-		auto get_offset = []( const uint8_t *data, int &offset )
-		{
-			auto value = 0;
-			for( ; ; ++offset )
-			{
-				value <<= 8;
-				value |= data[offset];
-				if( !( data[offset] & 0x80 ) )
-					break;
-			}
-			++offset;
-			return value;
-		};
-
 		try
 		{
 			g_ContentBuffer = node->get_text_content();
@@ -327,6 +314,20 @@ namespace DetailWindow
 				auto data = g_ContentBuffer.data();
 				if( !memcmp( data, "SVN\0", 4 ) )
 				{
+					auto get_offset = []( const uint8_t *data, int &offset )
+					{
+						auto value = 0;
+						for( ; ; ++offset )
+						{
+							value <<= 8;
+							value |= data[offset];
+							if( !( data[offset] & 0x80 ) )
+								break;
+						}
+						++offset;
+						return value;
+					};
+
 					auto str = std::string( "no implementation: --deltas option\r\n" );
 					g_ContentBuffer.insert( g_ContentBuffer.begin(), str.begin(), str.end() );
 				#if 0
@@ -340,13 +341,13 @@ namespace DetailWindow
 					offset += foo_length;
 					g_ContentBuffer.erase( g_ContentBuffer.begin(), g_ContentBuffer.begin() + offset );
 				#endif
+				}
 			}
-		}
 
 			try
 			{
 				g_ImageBuffer = g_WICManager.Load( g_ContentBuffer.data(), g_ContentBuffer.size() );
-				Update( true );
+				Update( DisplayMode::Image );
 			}
 			catch( const WICManager::failed_load & )
 			{
@@ -365,10 +366,10 @@ namespace DetailWindow
 				else
 					SetTextData( L"" );
 			}
-	}
+		}
 		catch( const std::exception &e )
 		{ MessageBoxA( nullptr, e.what(), nullptr, MB_OK ); }
-}
+	}
 
 	void SetBinaryData( const void *data, size_t size )
 	{
@@ -404,12 +405,25 @@ namespace DetailWindow
 			g_TextBuffer.emplace_back( binary.str() );
 		}
 
-		Update( false );
+		Update( DisplayMode::Binary );
 	}
 
-	void SetTextData( std::wstring text )
+	void SetTextData( std::wstring text, bool fixed_display_pos )
 	{
 		g_TextBuffer.clear();
+
+		auto replace_tab = []( std::wstring line )
+		{
+			auto pos = size_t( 0 );
+			for( ;; )
+			{
+				auto p = line.find_first_of( L"\t", pos );
+				if( p == std::wstring::npos )
+					break;
+				line.replace( p, 1, L"        ", g_Tabstop - p % g_Tabstop );
+			}
+			return line;
+		};
 
 		auto pos = size_t( 0 );
 		for( ;; )
@@ -418,14 +432,14 @@ namespace DetailWindow
 			if( line_end == std::wstring::npos )
 			{
 				if( pos != std::wstring::npos )
-					g_TextBuffer.emplace_back( text.substr( pos ) );
+					g_TextBuffer.emplace_back( replace_tab( text.substr( pos ) ) );
 				break;
 			}
-			g_TextBuffer.emplace_back( text.substr( pos, line_end - pos ) );
+			g_TextBuffer.emplace_back( replace_tab( text.substr( pos, line_end - pos ) ) );
 			pos = text.find_first_not_of( L"\r\n", line_end );
 		}
 
-		Update( false );
+		Update( DisplayMode::Text, fixed_display_pos );
 	}
 
 	void SetCharset( HWND hWnd, CharsetType type )
@@ -434,12 +448,12 @@ namespace DetailWindow
 		CheckMenuRadioItem( menu, ID_CHARSET_UTF8, ID_CHARSET_SHIFTJIS, ID_CHARSET_UTF8 + type, MF_BYCOMMAND );
 		g_CharsetType = type;
 
-		if( !g_ImageMode && !g_ContentBuffer.empty() )
+		if( g_DisplayMode == DisplayMode::Text && !g_ContentBuffer.empty() )
 			switch( type )
 			{
-			case CharsetType::UTF8: SetTextData( toWide( g_ContentBuffer.data(), g_ContentBuffer.size() ) ); break;
-			case CharsetType::Unicode: SetTextData( std::wstring( g_ContentBuffer.cbegin(), g_ContentBuffer.cend() ) ); break;
-			case CharsetType::ShiftJIS: SetTextData( SJIStoWide( g_ContentBuffer.data(), g_ContentBuffer.size() ) ); break;
+			case CharsetType::UTF8: SetTextData( toWide( g_ContentBuffer.data(), g_ContentBuffer.size() ), true ); break;
+			case CharsetType::Unicode: SetTextData( std::wstring( g_ContentBuffer.cbegin(), g_ContentBuffer.cend() ), true ); break;
+			case CharsetType::ShiftJIS: SetTextData( SJIStoWide( g_ContentBuffer.data(), g_ContentBuffer.size() ), true ); break;
 			}
 	}
 
@@ -453,7 +467,16 @@ namespace DetailWindow
 		auto menu = GetMenu( hWnd );
 		CheckMenuRadioItem( menu, ID_TABSTOP_2, ID_TABSTOP_8, ID_TABSTOP_2 + bit, MF_BYCOMMAND );
 
-		g_DTP.iTabLength = tabstop;
-		InvalidateRect( g_DetailWindow, nullptr, TRUE );
+		if( tabstop > 8 )
+			tabstop = 8;
+		g_Tabstop = tabstop;
+
+		if( g_DisplayMode == DisplayMode::Text && !g_ContentBuffer.empty() )
+			switch( g_CharsetType )
+			{
+			case CharsetType::UTF8: SetTextData( toWide( g_ContentBuffer.data(), g_ContentBuffer.size() ), true ); break;
+			case CharsetType::Unicode: SetTextData( std::wstring( g_ContentBuffer.cbegin(), g_ContentBuffer.cend() ), true ); break;
+			case CharsetType::ShiftJIS: SetTextData( SJIStoWide( g_ContentBuffer.data(), g_ContentBuffer.size() ), true ); break;
+			}
 	}
 }

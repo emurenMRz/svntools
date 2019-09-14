@@ -15,7 +15,7 @@ namespace DetailWindow
 
 	void SetNode( const svn::Node *node );
 	void SetBinaryData( const void *data, size_t size );
-	void SetTextData( std::wstring text );
+	void SetTextData( std::wstring text, bool fixed_display_pos = false );
 
 	void SetCharset( HWND hWnd, CharsetType type );
 	void SetTabstop( HWND hWnd, int tabstop );
