@@ -86,6 +86,7 @@
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(SolutionDir)_commonfiles;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <OutDir>$(SolutionDir)_bin\</OutDir>
+    <TargetName>svndumpviewer</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>

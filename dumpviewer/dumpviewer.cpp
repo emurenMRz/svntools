@@ -17,6 +17,7 @@
 #pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='amd64' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #pragma comment(lib, "comctl32")
 
+#define SUPPORT_SITE TEXT( "http://www.mrz-net.org/" )
 #define MAX_LOADSTRING 100
 #define BORDER_WIDTH 2
 #define BORDER_HIT_WIDTH ( BORDER_WIDTH * 4 )
@@ -310,6 +311,8 @@ void OnDropFiles( HWND hWnd, HDROP drop )
 {
 	try
 	{
+		TCHAR title[MAX_PATH * 2];
+
 		auto files = DragQueryFile( drop, -1, nullptr, -1 );
 		if( files > 1 )
 			files = 1;
@@ -317,12 +320,15 @@ void OnDropFiles( HWND hWnd, HDROP drop )
 		{
 			char path[MAX_PATH];
 			if( DragQueryFileA( drop, i, path, MAX_PATH ) )
+			{
+				wsprintf( title, L"%s - %S[読み込み中...]", szTitle, path );
+				SetWindowText( hWnd, title );
 				if( g_SVNDump.Init( path ) )
 				{
-					TCHAR title[MAX_PATH * 2];
 					wsprintf( title, L"%s - %S [format:%d, max rev:%d]", szTitle, path, g_SVNDump.GetFormatVersion(), g_SVNDump.GetMaxRevision() );
 					SetWindowText( hWnd, title );
 				}
+			}
 		}
 		DragFinish( drop );
 
@@ -347,10 +353,13 @@ INT_PTR CALLBACK About( HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam )
 	switch( message )
 	{
 	case WM_INITDIALOG:
+		SetDlgItemText( hDlg, IDC_WEBSITE, SUPPORT_SITE );
 		return (INT_PTR )TRUE;
 
 	case WM_COMMAND:
-		if( LOWORD( wParam ) == IDOK || LOWORD( wParam ) == IDCANCEL )
+		if( LOWORD( wParam ) == IDC_WEBSITE )
+			ShellExecute( hDlg, TEXT( "open" ), SUPPORT_SITE, NULL, NULL, SW_SHOWNORMAL );
+		else if( LOWORD( wParam ) == IDOK || LOWORD( wParam ) == IDCANCEL )
 		{
 			EndDialog( hDlg, LOWORD( wParam ) );
 			return (INT_PTR )TRUE;

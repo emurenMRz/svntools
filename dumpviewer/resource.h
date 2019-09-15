@@ -5,7 +5,8 @@
 #define IDM_ABOUT                       104
 #define IDM_EXIT                        105
 #define IDI_DUMPVIEWER                  107
-#define IDC_DUMPVIEWER                  109
+#define IDC_DUMPVIEWER                  108
+#define IDC_WEBSITE                     109
 #define IDR_MAINFRAME                   128
 #define IDC_REVISION_LIST               1000
 #define IDC_CONTENTS_LIST               1001
