@@ -10,7 +10,7 @@
 
 namespace svn
 {
-	namespace fs = std::experimental::filesystem;
+	namespace fs = std::filesystem;
 
 	using text_data_t = std::vector< uint8_t >;
 	using prop_data_t = std::map< std::string, text_data_t >;
@@ -55,6 +55,8 @@ namespace svn
 		Node &operator =( Node &&r ) = delete;
 	};
 
+	using Nodes = std::vector< Node >;
+
 	class Dump;
 	struct Revision
 	{
@@ -63,7 +65,7 @@ namespace svn
 
 		int number;
 		prop_data_t prop;
-		std::vector< Node > nodes;
+		Nodes nodes;
 
 		Revision();
 		~Revision() = default;
