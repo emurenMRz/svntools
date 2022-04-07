@@ -89,10 +89,16 @@ std::string compare_contents( const svn::Node &node1, const svn::Node &node2 )
 
 	if( node1.NodePath != node2.NodePath )
 		result << "		NodePath: " << node1.NodePath << " <> " << node2.NodePath << endl;
-	if( node1.NodeKind != node2.NodeKind )
-		result << "		NodeKind: " << node1.NodeKind << " <> " << node2.NodeKind << endl;
 	if( node1.NodeAction != node2.NodeAction )
 		result << "		NodeAction: " << node1.NodeAction << " <> " << node2.NodeAction << endl;
+	if( node1.NodeKind != node2.NodeKind )
+	{
+		auto action = node1.NodeAction == "delete" && node2.NodeAction == "delete";
+		auto kind = node1.NodeKind.empty() || node2.NodeKind.empty();
+		if( !( action && kind ) )
+			result << "		NodeKind: " << node1.NodeKind << " <> " << node2.NodeKind << endl;
+	}
+
 	if( node1.NodeCopyfromRev != node2.NodeCopyfromRev )
 		result << "		NodeCopyfromRev: " << node1.NodeCopyfromRev << " <> " << node2.NodeCopyfromRev << endl;
 	if( node1.NodeCopyfromPath != node2.NodeCopyfromPath )
